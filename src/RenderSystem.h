@@ -26,7 +26,25 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     for (int i = -1200; i < 2400; i += 100) DrawLine(-1600, i, 4800, i, LIGHTGRAY);
 
     for (const auto& e : entities) if (e.HasTag(TAG_WATER_SOURCE) && e.stateValue > 0.0f) DrawEllipse(e.position.x, e.position.y, e.stateValue, e.stateValue * 0.6f, {0, 121, 241, 150});
+    for (const auto& e : entities) {
+        if (e.HasTag(TAG_BANSHEE_STONE) && e.stateValue > 0.0f) {
+            float alpha = std::max(0.0f, 255.0f - (e.stateValue / 800.0f) * 255.0f);
+            DrawCircleLines(e.position.x, e.position.y - e.z, e.stateValue, {200, 100, 255, (unsigned char)alpha});
+            DrawCircleLines(e.position.x, e.position.y - e.z, e.stateValue * 0.5f, {200, 100, 255, (unsigned char)alpha});
+        }
+    }
     
+    // Flashlight Cone
+    for (const auto& e : entities) {
+        if (e.isUsing && e.HasTag(TAG_FLASHLIGHT)) {
+            Vector2 dir = player.facingDir; Vector2 perp = { -dir.y, dir.x }; 
+            Vector2 fl1 = e.position; 
+            Vector2 fl2 = { e.position.x + dir.x * 600.0f + perp.x * 300.0f, e.position.y + dir.y * 600.0f + perp.y * 300.0f }; 
+            Vector2 fl3 = { e.position.x + dir.x * 600.0f - perp.x * 300.0f, e.position.y + dir.y * 600.0f - perp.y * 300.0f };
+            DrawTriangle(fl1, fl2, fl3, { 255, 255, 200, 100 }); 
+        }
+    }
+
     if (hazVis.drawingBeam) DrawTriangle(hazVis.beamP1, hazVis.beamP2, hazVis.beamP3, { 0, 255, 0, 80 }); 
     if (hazVis.drawingExtinguisher) DrawTriangle(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); 
 
@@ -36,6 +54,8 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
 
         Color drawCol = e->color;
         if (e->HasTag(TAG_FUSEBOX)) drawCol = (e->stateValue > 0.5f) ? GREEN : RED; 
+        if (e->HasTag(TAG_WATER_SOURCE) && e->isStone) drawCol = SKYBLUE; // Frozen Ice!
+        if (e->HasTag(TAG_HOLE) && e->stateValue > 0.5f) drawCol = LIGHTGRAY; // Taped Hole!
 
         if (e->is3DBlock && e->zHeight > 0) {
             Rectangle frontFace = { e->position.x + e->movementBox.x, e->position.y + e->movementBox.y - e->zHeight - e->z, e->movementBox.width, e->zHeight };
@@ -46,6 +66,20 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
             Rectangle drawRec = e->GetWorldInteractionBox(); DrawRectangleRec(drawRec, drawCol); DrawRectangleLinesEx(drawRec, 2.0f, BLACK); 
         }
         if (e->name != "Wall" && e->name != "Door" && e->name != "Player" && e->name != "Pedestal") DrawText(e->name.c_str(), e->position.x - (MeasureText(e->name.c_str(), 10) / 2), e->GetWorldInteractionBox().y - 15, 10, BLACK);
+    }
+
+    // --- Render Room Darkness ---
+    for (const auto& e : entities) {
+        if (e.HasTag(TAG_LIGHTSWITCH) && e.stateValue < 0.5f) {
+            int rx = (int)std::floor(e.position.x / GAME_WIDTH);
+            int ry = (int)std::floor(e.position.y / GAME_HEIGHT);
+            
+            // Check if player is holding flashlight to cut through darkness
+            bool hasFlashlight = false;
+            for(const auto& item : entities) if(item.isGrabbed && item.isUsing && item.HasTag(TAG_FLASHLIGHT)) hasFlashlight = true;
+            
+            DrawRectangle(rx * GAME_WIDTH, ry * GAME_HEIGHT, GAME_WIDTH, GAME_HEIGHT, {0, 0, 0, (unsigned char)(hasFlashlight ? 180 : 230)});
+        }
     }
 
     EndMode2D(); 
@@ -69,6 +103,13 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
     
     if (player.isStone) DrawText("PETRIFIED!", 10, 40, 30, RED);
     if (player.isDead) DrawText("ZAPPED TO DEATH!", 10, 70, 30, ORANGE);
+
+    // DRAW TOOL USES
+    for (const auto& e : entities) {
+        if (e.isGrabbed && (e.HasTag(TAG_TAPE) || e.HasTag(TAG_BUBBLE_WRAP))) {
+            DrawText(TextFormat("%s USES LEFT: %d", e.name.c_str(), (int)e.stateValue), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (e.stateValue > 0) ? GREEN : RED);
+        }
+    }
 
     if (showInteractMenu) {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), {0, 0, 0, 150});

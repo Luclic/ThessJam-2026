@@ -156,6 +156,63 @@ inline ShiftReport EvaluateMuseum(const std::vector<Entity>& entities) {
         }
     }
 
+    // 6. Evaluate Mjolnir
+    const Entity* mjolnir = FindArtifactByTag(entities, TAG_MJOLNIR);
+    if (mjolnir) {
+        if (mjolnir->attachedTo != -1) {
+            report.reviews.push_back({"Mjolnir", SCORE_PERFECT, "Returned to its pedestal. Thor is pleased."});
+        } else if (mjolnir->isGlitching) {
+            report.reviews.push_back({"Mjolnir", SCORE_GAMEOVER, "Left blocking a major hallway. The museum had to shut down the wing."});
+            report.isFired = true;
+            if (report.finalVerdict.empty()) report.finalVerdict = "FIRED: You blocked fire exits with a divine hammer!";
+        } else {
+            report.reviews.push_back({"Mjolnir", SCORE_ADEQUATE, "You pushed it into a corner. Not great, but nobody tripped."});
+        }
+    }
+
+    // 7. Evaluate Gleipnir
+    const Entity* gleipnir = FindArtifactByTag(entities, TAG_GLEIPNIR);
+    if (gleipnir) {
+        if (gleipnir->isGlitching) {
+            report.reviews.push_back({"Gleipnir's Ribbon", SCORE_GAMEOVER, "The magic ribbon escaped and strangled a mannequin."});
+            report.isFired = true;
+            if (report.finalVerdict.empty()) report.finalVerdict = "FIRED: Gleipnir strangled a security guard!";
+        } else if (gleipnir->attachedTo != -1 && entities[gleipnir->attachedTo].HasTag(TAG_SANDBAG)) {
+            report.reviews.push_back({"Gleipnir's Ribbon", SCORE_PERFECT, "Safely distracted by a heavy sandbag."});
+        } else if (gleipnir->attachedTo != -1 && entities[gleipnir->attachedTo].HasTag(TAG_MUMMY)) {
+            report.reviews.push_back({"Gleipnir's Ribbon", SCORE_ADEQUATE, "You used it to tie up a mummy. Effective, but the exhibits are all mixed up."});
+        } else if (gleipnir->isStone) {
+            report.reviews.push_back({"Gleipnir's Ribbon", SCORE_ADEQUATE, "Petrified into a solid squiggle. The historians are crying."});
+        }
+    }
+
+    // 8. Evaluate Banshee Stone
+    const Entity* banshee = FindArtifactByTag(entities, TAG_BANSHEE_STONE);
+    if (banshee) {
+        if (banshee->isGlitching) {
+            report.reviews.push_back({"Banshee Stone", SCORE_GAMEOVER, "The screaming shattered the glass cases and deafened staff!"});
+            report.isFired = true;
+            if (report.finalVerdict.empty()) report.finalVerdict = "FIRED: Banshee wails shattered eardrums and exhibits!";
+        } else {
+            report.reviews.push_back({"Banshee Stone", SCORE_PERFECT, "Successfully muffled. Blissful silence."});
+        }
+    }
+    // 9. Evaluate Floor Holes (OSHA Hazard)
+    for (const auto& hole : entities) {
+        if (hole.HasTag(TAG_HOLE)) {
+            bool isSafe = (hole.stateValue > 0.5f); // 1.0f means it has a tape web
+            for (const auto& other : entities) if (other.attachedTo != -1 && &entities[other.attachedTo] == &hole && other.HasTag(TAG_WET_SIGN)) isSafe = true;
+
+            if (!isSafe) {
+                report.reviews.push_back({"Floor Hole", SCORE_GAMEOVER, "You left an unmarked hole in the floor. A child fell in."});
+                report.isFired = true;
+                if (report.finalVerdict.empty()) report.finalVerdict = "FIRED: Severe OSHA violation! An open pit was left unmarked.";
+            } else {
+                report.reviews.push_back({"Floor Hole", SCORE_ADEQUATE, "You sawed through the floor, but at least you warned people."});
+            }
+        }
+    }
+    
     // Generate Final Verdict if somehow missed
     if (!report.isFired) {
         report.finalVerdict = "NIGHT SHIFT COMPLETE: The museum opens on time. See you tomorrow, Janitor.";

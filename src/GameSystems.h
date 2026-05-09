@@ -34,7 +34,16 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             e.position = player.position; e.z = player.z + ((int)i == equippedEyewear ? 60.0f : 40.0f); e.velocity = {0,0}; e.zVelocity = 0; continue;
         }
 
-        e.velocity.x -= e.velocity.x * 6.0f * dt; e.velocity.y -= e.velocity.y * 6.0f * dt;
+        // --- Ice Rink Physics ---
+        float currentFriction = 6.0f;
+        for (auto& w : entities) {
+            if (w.HasTag(TAG_WATER_SOURCE) && w.isStone && Vector2Distance(e.position, w.position) < w.stateValue) {
+                currentFriction = 0.5f; // SLIPPERY ICE!
+            }
+        }
+        e.velocity.x -= e.velocity.x * currentFriction * dt; 
+        e.velocity.y -= e.velocity.y * currentFriction * dt;
+
         if (&e == &player && Vector2Length(e.velocity) > 700.0f) e.velocity = Vector2Scale(Vector2Normalize(e.velocity), 700.0f);
 
         if (e.HasTag(TAG_SANDALS) && e.isGlitching && !e.isStone && !e.isGrabbed) {
@@ -57,7 +66,12 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             e.z += e.zVelocity * dt;
             if (e.z <= groundZ) {
                 e.z = groundZ; e.zVelocity *= -0.3f;
-                if (prevZVel < -300.0f) ProcessImpact(e);
+                if (prevZVel < -300.0f) {
+                    // BUBBLE MAT CHECK!
+                    bool safe = false;
+                    for (const auto& mat : entities) if (mat.HasTag(TAG_MAT) && CheckCollisionRecs(e.GetWorldMovementBox(), mat.GetWorldMovementBox())) safe = true;
+                    if (!safe) ProcessImpact(e); // Only break if no mat!
+                }
                 if (abs(e.zVelocity) < 30.0f) e.zVelocity = 0.0f; e.velocity = Vector2Scale(e.velocity, 0.4f);
             }
         }
@@ -109,6 +123,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 e.isGlitching = false; e.color = DARKBLUE; e.stateTimer = 0.0f; break; 
             }
         }
+        
         // --- Sisyphus Boulder Logic ---
         if (e.HasTag(TAG_BOULDER) && e.isGlitching) {
             e.velocity.x += 120.0f * dt; // Constantly accelerates right!
@@ -155,6 +170,64 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 }
             }
         }
+
+        // --- Egyptian Wing Logic ---
+        if (e.HasTag(TAG_SUN_DISK)) {
+            if (e.isGlitching) {
+                e.color = ORANGE; 
+                e.canGrab = false; // Too hot to touch!
+                
+                // Chemistry: Cool down automatically if dropped in water
+                for (auto& w : entities) {
+                    if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector2Distance(e.position, w.position) < w.stateValue) {
+                        e.isGlitching = false; break;
+                    }
+                }
+            } else {
+                e.color = BLACK; // Obsidian rock
+                e.canGrab = true; // Safe to carry
+            }
+        }
+
+        if (e.HasTag(TAG_MUMMY) && e.isGlitching && !e.isStone && !e.isGrabbed) {
+            Vector2 targetPos = e.position;
+            bool targetFound = false;
+
+            int myRoomX = (int)std::floor(e.position.x / GAME_WIDTH);
+            int myRoomY = (int)std::floor(e.position.y / GAME_HEIGHT);
+
+            bool lightOn = true;
+            Entity* mySwitch = nullptr;
+            for (auto& other : entities) {
+                if (other.HasTag(TAG_LIGHTSWITCH) && (int)std::floor(other.position.x / GAME_WIDTH) == myRoomX && (int)std::floor(other.position.y / GAME_HEIGHT) == myRoomY) {
+                    mySwitch = &other; lightOn = (other.stateValue > 0.5f); break;
+                }
+            }
+
+            if (lightOn && mySwitch) {
+                targetPos = mySwitch->position; targetFound = true;
+            } else {
+                for (auto& other : entities) if (other.HasTag(TAG_SARCOPHAGUS)) { targetPos = other.position; targetFound = true; break; }
+            }
+
+            if (targetFound) {
+                Vector2 dir = Vector2Normalize(Vector2Subtract(targetPos, e.position));
+                e.velocity.x += dir.x * 200.0f * dt; // Slow shamble
+                e.velocity.y += dir.y * 200.0f * dt;
+
+                // Turn off switch if close!
+                if (lightOn && Vector2Distance(e.position, targetPos) < 100.0f) mySwitch->stateValue = 0.0f; 
+            }
+
+            // Knock over artifacts blindly
+            for (auto& other : entities) {
+                if (&e != &other && (other.HasTag(TAG_FRAGILE) || other.HasTag(TAG_MEDUSA)) && !other.HasTag(TAG_BROKEN)) {
+                    if (CheckCollisionRecs(e.GetWorldMovementBox(), other.GetWorldMovementBox())) {
+                        other.AddTag(TAG_BROKEN); other.color = DARKGRAY; other.zHeight = 5.0f; other.attachedTo = -1;
+                    }
+                }
+            }
+        }
     }
 
     // --- 2. LIGHTNING DEATH CHECK ---
@@ -180,10 +253,89 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 }
             }
         }
+        
         if (e.isUsing && e.HasTag(TAG_EXTINGUISHER)) {
             visuals.drawingExtinguisher = true; Vector2 dir = player.facingDir; Vector2 perp = { -dir.y, dir.x }; 
             visuals.extP1 = e.position; visuals.extP2 = { e.position.x + dir.x * 400.0f + perp.x * 200.0f, e.position.y + dir.y * 400.0f + perp.y * 200.0f }; visuals.extP3 = { e.position.x + dir.x * 400.0f - perp.x * 200.0f, e.position.y + dir.y * 400.0f - perp.y * 200.0f };
+            
+            // Recoil/Boost Player!
+            player.velocity.x -= dir.x * 1500.0f * dt;
+            player.velocity.y -= dir.y * 1500.0f * dt;
+
+            for (auto& target : entities) {
+                if (&target != &player && CheckCollisionPointTriangle(target.position, visuals.extP1, visuals.extP2, visuals.extP3)) {
+                    if (target.HasTag(TAG_SUN_DISK) && target.isGlitching) target.isGlitching = false; // Cools Disk
+                    if (target.HasTag(TAG_WATER_SOURCE) && target.stateValue > 0) { target.isStone = true; target.isGlitching = false; } // Freezes Water
+                    if (target.canGrab && !target.HasTag(TAG_HEAVY)) {
+                        // Knockback light items!
+                        target.velocity.x += dir.x * 2500.0f * dt;
+                        target.velocity.y += dir.y * 2500.0f * dt;
+                    }
+                }
+            }
         }
+
+        // Hole Logic
+        if (e.HasTag(TAG_HOLE)) {
+            for (auto& target : entities) {
+                if (&target != &e && CheckCollisionRecs(e.GetWorldMovementBox(), target.GetWorldMovementBox())) {
+                    if (target.HasTag(TAG_WATER_SOURCE)) target.isGlitching = false; // Drains water
+                    if (target.HasTag(TAG_BOULDER) && target.isGlitching) {
+                        target.isGlitching = false; target.velocity = {0,0}; target.position = e.position; target.zHeight = 20.0f; // Swallows boulder
+                    }
+                    if (target.HasTag(TAG_MJOLNIR)) target.isGlitching = false; // Mjolnir is in the hole, safe!
+                }
+            }
+        }
+
+        // --- Nordic & Celtic Wing Logic ---
+        
+        // Mjolnir Bubble Wrap Dragging
+        if (e.HasTag(TAG_MJOLNIR) && !e.canGrab) {
+            for (const auto& w : entities) {
+                if (w.HasTag(TAG_BUBBLE_WRAP) && w.isGrabbed) {
+                    if (CheckCollisionRecs(e.GetWorldMovementBox(), w.GetWorldInteractionBox())) {
+                        e.position = w.position; // Drags along the mat!
+                    }
+                }
+            }
+        }
+
+        // Gleipnir Slithering
+        if (e.HasTag(TAG_GLEIPNIR) && e.isGlitching && !e.isStone) {
+            e.z = 5.0f; // Slithers low
+            Vector2 dir = Vector2Normalize(Vector2Subtract(player.position, e.position));
+            e.velocity.x += dir.x * 250.0f * dt;
+            e.velocity.y += dir.y * 250.0f * dt;
+
+            for (auto& other : entities) {
+                if (&e != &other && !other.isGrabbed && CheckCollisionRecs(e.GetWorldMovementBox(), other.GetWorldMovementBox())) {
+                    if (other.HasTag(TAG_SANDBAG)) {
+                        e.attachedTo = &other - &entities[0]; e.isGlitching = false; break; // Distracted!
+                    }
+                    if (other.HasTag(TAG_MUMMY) && other.isGlitching) {
+                        e.attachedTo = &other - &entities[0]; e.isGlitching = false; 
+                        other.isGlitching = false; other.color = WHITE; break; // Ties up mummy!
+                    }
+                }
+            }
+        }
+
+        // Banshee Stone Screaming
+        if (e.HasTag(TAG_BANSHEE_STONE) && e.isGlitching && !e.isStone) {
+            e.stateValue += 300.0f * dt; // StateValue acts as the visual pulse radius
+            if (e.stateValue > 800.0f) {
+                e.stateValue = 0.0f; // Reset pulse
+                // 5% chance per pulse to wake up a random artifact in the museum!
+                if (GetRandomValue(0, 100) < 5) {
+                    int randIdx = GetRandomValue(1, entities.size()-1);
+                    if (!entities[randIdx].isGrabbed && entities[randIdx].name != "Wall" && entities[randIdx].name != "Door" && entities[randIdx].name != "Pedestal") {
+                        entities[randIdx].isGlitching = true;
+                    }
+                }
+            }
+        }
+        
         if (e.HasTag(TAG_WIND_BAG) && e.isGlitching) {
             for (auto& target : entities) {
                 if (&target != &e && target.attachedTo == -1 && !target.isStone && target.name != "Wall" && target.name != "Door" && target.name != "Pedestal") {

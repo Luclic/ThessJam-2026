@@ -10,29 +10,29 @@
 #include "GameSystems.h"
 #include "RenderSystem.h"
 
-// --- Global State ---
+// --- 1. Enums & Constants ---
+enum GameState { STATE_MENU, STATE_PLAYING, STATE_REVIEW, STATE_GAMEOVER_FIRED, STATE_GAMEOVER_DEATH };
+const float SECONDS_PER_HOUR = 30.0f;
+
+// --- 2. Global Game State ---
+GameState currentState = STATE_MENU;
+Camera2D camera = { 0 };
 std::vector<Entity> entities;
+
 int grabbedEntityIndex = -1;
 int equippedEyewear = -1; 
 int equippedGloves = -1; 
-Camera2D camera = { 0 };
 
-bool doorsOpen[5] = {false, false, false, false, false}; 
+int currentNight = 1;
+float shiftTimer = 0.0f;
+ShiftReport lastReport;
 
-// --- Interaction UI State ---
+// --- 3. UI & Environment State ---
 bool showInteractMenu = false;
 bool isDropMenu = false;
 std::vector<int> interactTargets;
 int interactSelectedIndex = 0;
-
-// --- Game Loop State ---
-// --- Game Loop State ---
-enum GameState { STATE_MENU, STATE_PLAYING, STATE_REVIEW, STATE_GAMEOVER_FIRED, STATE_GAMEOVER_DEATH };
-GameState currentState = STATE_MENU;
-int currentNight = 1;
-float shiftTimer = 0.0f;
-const float SECONDS_PER_HOUR = 30.0f;
-ShiftReport lastReport;
+bool doorsOpen[5] = {false, false, false, false, false};
 
 void ResetNight() {
     entities.clear();
@@ -47,7 +47,7 @@ void ResetNight() {
 
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1280, 960, "Museum Tech Support - Phase 13");
+    InitWindow(1280, 960, "Museum Tech Support - Phase 15");
     SetTargetFPS(60);
 
     RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
@@ -82,9 +82,6 @@ int main(void) {
             EndDrawing(); continue;
         }
 
-        // ==========================================
-        // STATE: GAMEOVER (FIRED AT 8 AM)
-        // ==========================================
         if (currentState == STATE_GAMEOVER_FIRED) {
             BeginDrawing(); ClearBackground(MAROON);
             DrawText("YOU'RE FIRED.", GetScreenWidth()/2 - 150, 200, 50, WHITE);
@@ -94,9 +91,6 @@ int main(void) {
             EndDrawing(); continue;
         }
 
-        // ==========================================
-        // STATE: GAMEOVER (DIED MID-SHIFT)
-        // ==========================================
         if (currentState == STATE_GAMEOVER_DEATH) {
             BeginDrawing(); ClearBackground(RED);
             DrawText("YOU DIED.", GetScreenWidth()/2 - 120, 200, 50, BLACK);
@@ -125,8 +119,8 @@ int main(void) {
             if (IsKeyPressed(KEY_O)) { for (auto& e : entities) if (e.HasTag(TAG_WATER_SOURCE)) e.isGlitching = !e.isGlitching; }
             if (IsKeyPressed(KEY_P)) { for (auto& e : entities) if (e.HasTag(TAG_SANDALS)) e.isGlitching = true; }
             if (IsKeyPressed(KEY_K)) { for (auto& e : entities) if (e.HasTag(TAG_WIND_BAG)) e.isGlitching = !e.isGlitching; }
-            if (IsKeyPressed(KEY_L)) { for (auto& e : entities) if (e.HasTag(TAG_BOULDER)) e.isGlitching = !e.isGlitching; } // NEW: Boulder Trigger
-            if (IsKeyPressed(KEY_SIX)) { shiftTimer = 8 * SECONDS_PER_HOUR; } // DEBUG: END NIGHT IMMEDIATELY
+            if (IsKeyPressed(KEY_L)) { for (auto& e : entities) if (e.HasTag(TAG_BOULDER)) e.isGlitching = !e.isGlitching; }
+            if (IsKeyPressed(KEY_SIX)) { shiftTimer = 8 * SECONDS_PER_HOUR; }
 
             if (IsKeyPressed(KEY_ONE)) doorsOpen[0] = !doorsOpen[0]; if (IsKeyPressed(KEY_TWO)) doorsOpen[1] = !doorsOpen[1];
             if (IsKeyPressed(KEY_THREE)) doorsOpen[2] = !doorsOpen[2]; if (IsKeyPressed(KEY_FOUR)) doorsOpen[3] = !doorsOpen[3];
@@ -185,7 +179,7 @@ int main(void) {
                     Rectangle pIntBox = player.GetWorldInteractionBox(); pIntBox.width += 80; pIntBox.height += 80; 
                     
                     for (auto& e : entities) {
-                        if (e.HasTag(TAG_FUSEBOX) && CheckCollisionRecs(pIntBox, e.GetWorldInteractionBox())) {
+                        if ((e.HasTag(TAG_FUSEBOX) || e.HasTag(TAG_LIGHTSWITCH)) && CheckCollisionRecs(pIntBox, e.GetWorldInteractionBox())) {
                             e.stateValue = (e.stateValue > 0.5f) ? 0.0f : 1.0f; environmentF = true; break;
                         }
                     }
@@ -211,7 +205,23 @@ int main(void) {
                         }
                     }
                 }
-
+                
+                // NEW: Tool 'F' Secondary Fire
+                if (IsKeyPressed(KEY_F) && grabbedEntityIndex != -1) {
+                    Entity& held = entities[grabbedEntityIndex];
+                    if (held.HasTag(TAG_HOLE_SAW)) {
+                        Entity hole = MakeProp("Floor Hole", {player.position.x + player.facingDir.x * 70.0f, player.position.y + player.facingDir.y * 70.0f}, 0, BLACK, {TAG_HOLE});
+                        hole.isSolid = false; hole.canGrab = false; hole.movementBox = {-30, -30, 60, 60}; 
+                        entities.push_back(hole);
+                    }
+                    if (held.HasTag(TAG_BUBBLE_WRAP) && held.stateValue > 0) {
+                        held.stateValue -= 1.0f;
+                        Entity mat = MakeProp("Bubble Mat", player.position, 5, SKYBLUE, {TAG_MAT});
+                        mat.isSolid = false; mat.canGrab = false; mat.movementBox = {-50, -50, 100, 100};
+                        entities.push_back(mat);
+                    }
+                }
+                
                 if (IsKeyPressed(KEY_E)) {
                     interactTargets.clear();
                     if (grabbedEntityIndex != -1) {
