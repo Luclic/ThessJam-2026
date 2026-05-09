@@ -28,7 +28,7 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
 
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BROKEN)) {
         target.RemoveTag(TAG_BROKEN);
-        if (target.HasTag(TAG_EYEWEAR)) target.color = BLACK; 
+        if (target.HasTag(TAG_EYEWEAR)) { target.color = BLACK; target.zHeight = 10.0f; } 
         else { target.color = YELLOW; target.zHeight = 30.0f; }
         return CHEM_USED_BUT_KEPT; 
     }

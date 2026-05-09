@@ -64,11 +64,19 @@ inline void InitLevel(std::vector<Entity>& e) {
     sandals.isSolid = false;
     e.push_back(sandals);
 
+    // --- ROOM 3 (Left) ---
+    e.push_back(MakePedestal({-800, 450}));
+    
+    Entity boulder = MakeSolidProp("Sisyphus Boulder", {-800, 450}, 100, DARKGRAY, {TAG_BOULDER, TAG_HEAVY});
+    boulder.canGrab = false; 
+    boulder.isGlitching = false; // CHANGED: Now waits for the trigger!
+    boulder.movementBox = {-60, -30, 120, 60}; 
+    e.push_back(boulder);
+
     // --- ROOM 2 (Right) ---
     e.push_back(MakePedestal({2400, 500}));
     e.push_back(MakeArtifact("Holy Cup", {2400, 500}, 30, GOLD, {TAG_WATER_SOURCE}));
     e.push_back(MakeProp("Giant Cork", {2600, 700}, 20, BROWN, {TAG_CORK}));
-
     e.push_back(MakePedestal({2800, 500}));
     Entity windBag = MakeArtifact("Bag of Winds", {2800, 500}, 30, LIGHTGRAY, {TAG_WIND_BAG});
     windBag.canGrab = true; windBag.canThrow = true; windBag.isSolid = false;
@@ -80,4 +88,5 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back(MakeProp("Mop", {2500, 1500}, 60, RAYWHITE, {TAG_MOP}));
     e.push_back(MakeSolidProp("Heavy Sandbag", {2700, 1500}, 30, BEIGE, {TAG_SANDBAG, TAG_HEAVY})); 
     e.push_back(MakeProp("Magic Sponge", {2900, 1500}, 20, PINK, {TAG_SPONGE})); 
+    e.push_back(MakeProp("Wet Floor Sign", {2100, 1650}, 40, YELLOW, {TAG_WET_SIGN})); // NEW SIGN!
 }
