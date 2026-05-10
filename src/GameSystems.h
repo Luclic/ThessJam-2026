@@ -15,20 +15,23 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
     Entity& player = entities[0];
     HazardVisuals visuals;
 
-    // --- 1. PHYSICS & KINEMATICS ---
     for (size_t i = 0; i < entities.size(); ++i) {
         Entity& e = entities[i];
         
         if ((int)i == grabbedEntityIndex) {
             e.position = player.position; 
-            e.position.y = player.position.y + 50.0f; // Hold slightly above ground
+            e.position.y = player.position.y + 50.0f; 
             e.velocity = {0,0,0}; continue;
         }
         
         if (e.attachedTo != -1) {
             Entity& parent = entities[e.attachedTo];
             e.position = parent.position; 
-            e.position.y = parent.position.y + parent.boundsList[0].max.y; // Sit on top of parent's bounds
+            
+            // --- SAFETY CHECK: Prevent segfault if parent has no hitboxes ---
+            float parentHeight = parent.boundsList.empty() ? 10.0f : parent.boundsList[0].max.y;
+            e.position.y = parent.position.y + parentHeight; 
+            
             if (parent.HasTag(TAG_ZEUS)) { e.position.x -= 40.0f; e.position.y += 40.0f; } 
             if (parent.HasTag(TAG_FUSEBOX)) { e.position.z += 20.0f; e.position.y -= 20.0f; } 
             e.velocity = {0,0,0}; continue; 
@@ -39,11 +42,10 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             e.velocity = {0,0,0}; continue;
         }
 
-        // --- Ice Rink Physics ---
         float currentFriction = 6.0f;
         for (auto& w : entities) {
             if (w.HasTag(TAG_WATER_SOURCE) && w.isStone && Vector3Distance(e.position, w.position) < w.stateValue) {
-                currentFriction = 0.5f; // SLIPPERY ICE!
+                currentFriction = 0.5f; 
             }
         }
         e.velocity.x -= e.velocity.x * currentFriction * dt; 
@@ -63,7 +65,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             if (e.stateTimer > 0.0f) { e.stateTimer -= dt; if (e.stateTimer <= 0.0f) e.isGlitching = true; }
         }
 
-        // --- IMPROVED 3D COLLISION RESOLUTION ---
         if (!e.isStatic) { 
             float prevYVel = e.velocity.y;
             e.velocity.y -= 2400.0f * dt; 
@@ -72,20 +73,18 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             std::vector<BoundingBox> myBoxY = e.GetWorldBounds();
             bool hitGround = false;
             
-            if (e.position.y <= 0.1f) { // Floor buffer
+            if (e.position.y <= 0.1f) { 
                 e.position.y = 0.0f;
                 hitGround = true;
             } else {
                 for (const auto& other : entities) {
                     if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1) {
                         if (CheckCollisionLists(myBoxY, other.GetWorldBounds())) {
-                            // If moving down, snap to top of object
                             if (e.velocity.y <= 0.0f) { 
                                 float highestY = -99999.0f;
                                 for (const auto& b : other.GetWorldBounds()) {
                                     if (b.max.y > highestY) highestY = b.max.y;
                                 }
-                                // Snap slightly ABOVE (0.1f) to prevent sticking loop
                                 e.position.y = highestY + 0.1f;
                                 hitGround = true; 
                                 break;
@@ -96,12 +95,11 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
 
             if (hitGround) {
-                e.velocity.y = 0.0f; // Reset vertical velocity on impact
-                // Friction while touching ground
+                e.velocity.y = 0.0f; 
                 e.velocity.x *= 0.8f; 
                 e.velocity.z *= 0.8f;
                 
-                if (prevYVel < -600.0f) { // Impact threshold
+                if (prevYVel < -600.0f) { 
                     bool safe = false;
                     for (const auto& mat : entities) if (mat.HasTag(TAG_MAT) && CheckCollisionLists(e.GetWorldBounds(), mat.GetWorldBounds())) safe = true;
                     if (!safe) ProcessImpact(e); 
@@ -109,12 +107,11 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // --- X Axis Collision ---
         if (abs(e.velocity.x) > 0.1f && !e.isGrabbed) {
             e.position.x += e.velocity.x * dt;
             std::vector<BoundingBox> nextX = e.GetWorldBounds();
             for (auto& other : entities) {
-                if (e.HasTag(TAG_BOULDER) && other.name == "stand2") continue; // Changed Pedestal to stand2 per newer iteration
+                if (e.HasTag(TAG_BOULDER) && other.name == "stand2") continue; 
                 if (e.HasTag(TAG_BOULDER) && other.name == "Player") continue; 
                 if (e.name == "Player" && other.HasTag(TAG_BOULDER)) continue; 
 
@@ -124,7 +121,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
         
-        // --- Z Axis Collision (Forward/Back) ---
         if (abs(e.velocity.z) > 0.1f && !e.isGrabbed) {
             e.position.z += e.velocity.z * dt;
             std::vector<BoundingBox> nextZ = e.GetWorldBounds();
@@ -157,11 +153,9 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
         
-        // --- Sisyphus Boulder Logic ---
         if (e.HasTag(TAG_BOULDER) && e.isGlitching) {
-            e.velocity.x += 120.0f * dt; // Constantly accelerates right!
+            e.velocity.x += 120.0f * dt; 
 
-            // 1. Sandbag Block Check
             for (const auto& other : entities) {
                 if (other.HasTag(TAG_SANDBAG) && !other.isGrabbed && other.position.y < 20.0f) {
                     if (CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds()) && other.position.x > e.position.x) {
@@ -170,27 +164,21 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 }
             }
 
-            // 2. Player Push Logic
             if (CheckCollisionLists(e.GetWorldBounds(), player.GetWorldBounds())) {
                 if (player.position.x > e.position.x) { 
-                    if (player.velocity.x < -10.0f) {
-                        e.velocity.x = player.velocity.x;
-                    } else {
-                        player.velocity.x = e.velocity.x;
-                        player.position.x += e.velocity.x * dt; 
-                    }
+                    if (player.velocity.x < -10.0f) { e.velocity.x = player.velocity.x; } 
+                    else { player.velocity.x = e.velocity.x; player.position.x += e.velocity.x * dt; }
                 } else {
                     if (player.velocity.x > 10.0f) e.velocity.x = player.velocity.x;
                 }
             }
 
-            // 3. Crush Artifacts in its path!
             for (auto& other : entities) {
                 if (&e != &other && (other.HasTag(TAG_FRAGILE) || other.HasTag(TAG_MEDUSA))) {
                     if (CheckCollisionLists(e.GetWorldInteractBounds(), other.GetWorldInteractBounds()) && !other.HasTag(TAG_BROKEN)) {
                         other.AddTag(TAG_BROKEN);
                         other.color = DARKGRAY;
-                        other.boundsList[0].max.y = 5.0f; // Flattens it in 3D
+                        if (!other.boundsList.empty()) other.boundsList[0].max.y = 5.0f; // SAFETY CHECK
                         other.isGlitching = false; 
                         other.attachedTo = -1; 
                     }
@@ -198,7 +186,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // --- Egyptian Wing Logic ---
         if (e.HasTag(TAG_SUN_DISK)) {
             if (e.isGlitching) {
                 e.color = ORANGE; e.canGrab = false; 
@@ -238,25 +225,24 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 if (lightOn && Vector3Distance(e.position, targetPos) < 100.0f) mySwitch->stateValue = 0.0f; 
             }
 
-            // Knock over artifacts blindly
             for (auto& other : entities) {
                 if (&e != &other && (other.HasTag(TAG_FRAGILE) || other.HasTag(TAG_MEDUSA)) && !other.HasTag(TAG_BROKEN)) {
                     if (CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
-                        other.AddTag(TAG_BROKEN); other.color = DARKGRAY; other.boundsList[0].max.y = 5.0f; other.attachedTo = -1;
+                        other.AddTag(TAG_BROKEN); other.color = DARKGRAY; 
+                        if (!other.boundsList.empty()) other.boundsList[0].max.y = 5.0f; // SAFETY CHECK
+                        other.attachedTo = -1;
                     }
                 }
             }
         }
     }
 
-    // --- 2. LIGHTNING DEATH CHECK ---
     bool playerInWater = false;
     for (const auto& w : entities) if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(player.position, w.position) < w.stateValue) playerInWater = true;
     if (grabbedEntityIndex != -1 && entities[grabbedEntityIndex].HasTag(TAG_ELECTRIC) && !entities[grabbedEntityIndex].isStone) {
         if (equippedGloves == -1 || playerInWater) player.isDead = true; 
     }
 
-    // --- 3. HAZARD LOGIC ---
     for (int i = 0; i < entities.size(); ++i) {
         Entity& e = entities[i];
         if (e.HasTag(TAG_MEDUSA) && e.isGlitching) {
@@ -310,7 +296,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // Hole Logic
         if (e.HasTag(TAG_HOLE)) {
             for (auto& target : entities) {
                 if (&target != &e && CheckCollisionLists(e.GetWorldBounds(), target.GetWorldBounds())) {
@@ -323,7 +308,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // Mjolnir Bubble Wrap Dragging
         if (e.HasTag(TAG_MJOLNIR) && !e.canGrab) {
             for (const auto& w : entities) {
                 if (w.HasTag(TAG_BUBBLE_WRAP) && w.isGrabbed) {
@@ -334,7 +318,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // Gleipnir Slithering
         if (e.HasTag(TAG_GLEIPNIR) && e.isGlitching && !e.isStone) {
             e.position.y = 5.0f; 
             Vector3 dir = Vector3Normalize(Vector3Subtract(player.position, e.position));
@@ -354,7 +337,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // Banshee Stone Screaming
         if (e.HasTag(TAG_BANSHEE_STONE) && e.isGlitching && !e.isStone) {
             e.stateValue += 300.0f * dt; 
             if (e.stateValue > 800.0f) {
