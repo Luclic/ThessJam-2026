@@ -1,7 +1,10 @@
 #pragma once
 #include "Entities.h"
+#include "Hitboxes_Export.h"
 
 inline void InitLevel(std::vector<Entity>& e) {
+    auto globalHitboxes = GetGlobalHitboxes();
+
     e.push_back({ "Player", {-800.0, 50.0, 600.0}, {0,0,0}, {0,0,1}, {}, {}, {0,121,241,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
     e.back().boundsList = globalHitboxes["Player"];
     e.back().interactBoundsList = globalHitboxes["Player"];
@@ -2087,4 +2090,7 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "floor11", {-400.0, 0.0, 400.0}, {0,0,0}, {0,0,1}, {}, {}, {255,255,255,255}, false, false, false, false, false, false, false, true, -1, false, false, false, false, 0.0, 0.0, {} });
     e.back().boundsList = globalHitboxes["floor11"];
     e.back().interactBoundsList = globalHitboxes["floor11"];
+    e.push_back({ "pillar1", {-1850.0, 0.0, -220.0}, {0,0,0}, {0,0,1}, {}, {}, {255,255,255,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["pillar1"];
+    e.back().interactBoundsList = globalHitboxes["pillar1"];
 }

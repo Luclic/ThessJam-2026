@@ -144,3 +144,24 @@ const int GAME_HEIGHT = 1200;
 inline Entity MakeProp(std::string name, Vector3 pos, BoundingBox b, Color col, std::vector<Tag> tags) { 
     return { name, pos, {0,0,0}, {0,0,1}, {b}, {b}, col, true, true, false, false, false, true, false, false, -1, false, false, false, false, 0.0f, 0.0f, tags }; 
 }
+
+// --- COLOR VARIANT LOGIC ---
+inline std::string GetBaseModelName(const std::string& name) {
+    if (name=="wall1"||name=="wall2"||name=="wall3"||name=="wall4") return "wall1";
+    if (name=="wall1corner"||name=="wall2corner"||name=="wall3corner"||name=="wall4corner") return "wall1corner";
+    if (name=="arch1"||name=="arch2"||name=="arch3") return "arch1";
+    if (name=="archarch1"||name=="archarch2"||name=="archarch3") return "archarch1";
+    if (name=="floor11"||name=="floor21"||name=="floor31"||name=="floor41") return "floor11";
+    if (name=="floor12"||name=="floor22"||name=="floor32"||name=="floor42") return "floor12";
+    return name;
+}
+
+inline std::string GetNextStyle(const std::string& name) {
+    if (name == "wall1") return "wall2"; if (name == "wall2") return "wall3"; if (name == "wall3") return "wall4"; if (name == "wall4") return "wall1";
+    if (name == "wall1corner") return "wall2corner"; if (name == "wall2corner") return "wall3corner"; if (name == "wall3corner") return "wall4corner"; if (name == "wall4corner") return "wall1corner";
+    if (name == "arch1") return "arch2"; if (name == "arch2") return "arch3"; if (name == "arch3") return "arch1";
+    if (name == "archarch1") return "archarch2"; if (name == "archarch2") return "archarch3"; if (name == "archarch3") return "archarch1";
+    if (name == "floor11") return "floor21"; if (name == "floor21") return "floor31"; if (name == "floor31") return "floor41"; if (name == "floor41") return "floor11";
+    if (name == "floor12") return "floor22"; if (name == "floor22") return "floor32"; if (name == "floor32") return "floor42"; if (name == "floor42") return "floor12";
+    return name; // Return unchanged if not a variant object
+}

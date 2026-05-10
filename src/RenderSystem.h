@@ -33,7 +33,7 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     cam3D.position = (Vector3){ camera.target.x + GAME_WIDTH/2.0f, 1500.0f, camera.target.y + GAME_HEIGHT/2.0f + 800.0f }; 
     cam3D.target = (Vector3){ camera.target.x + GAME_WIDTH/2.0f, 0.0f, camera.target.y + GAME_HEIGHT/2.0f };      
     cam3D.up = (Vector3){ 0.0f, 1.0f, 0.0f }; 
-    cam3D.fovy = 55.0f; 
+    cam3D.fovy = 45.0f; 
     cam3D.projection = CAMERA_PERSPECTIVE;
 
     BeginMode3D(cam3D);
@@ -46,9 +46,10 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
         if (e->color.a < 255) continue; 
         if (Vector2Distance({e->position.x, e->position.z}, camCenter) > 2500.0f) continue;
 
-        auto modIt = models.find(e->name);
+        std::string baseName = GetBaseModelName(e->name);
+        auto modIt = models.find(e->name); // Still load the specific color model!
         if (modIt != models.end()) {
-            ModelTweak tweak = globalTweaks[e->name];
+            ModelTweak tweak = globalTweaks[baseName];
             float rad = e->stateValue * DEG2RAD;
             float cosR = cos(rad); float sinR = sin(rad);
             Vector3 rotatedOffset = { tweak.offset.x * cosR + tweak.offset.z * sinR, tweak.offset.y, -tweak.offset.x * sinR + tweak.offset.z * cosR };
