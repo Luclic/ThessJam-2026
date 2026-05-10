@@ -12,6 +12,13 @@
 #include <unordered_map>
 #include <string>
 
+// --- Animation Index Mapping (Quaternius Pack) ---
+const int idxIdle = 4;
+const int idxInteract = 10;
+const int idxRoll = 15;
+const int idxRun = 24;
+const int idxWalk = 30;
+
 // --- 1. Enums & Constants ---
 enum GameState { STATE_MENU, STATE_PLAYING, STATE_REVIEW, STATE_GAMEOVER_FIRED, STATE_GAMEOVER_DEATH };
 const float SECONDS_PER_HOUR = 30.0f;
@@ -66,24 +73,17 @@ int main(void) {
     for (const char* mn : modelNames) {
         models[mn] = LoadModel(TextFormat("resources/%s.glb", mn));
     }
-
+    
     // --- LOAD PLAYER MODEL, TEXTURE, & ANIMATIONS ---
-    models["Player"] = LoadModel("resources/character.glb"); 
-    
-    // Apply the diffuse texture to all materials on the player model!
-    Texture2D playerTex = LoadTexture("resources/texture.png");
-    for (int i = 0; i < models["Player"].materialCount; i++) {
-        models["Player"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = playerTex;
-    }
-    
-    int idleCount = 0, runCount = 0, jumpCount = 0;
-    ModelAnimation* idleAnim = LoadModelAnimations("resources/idle.glb", &idleCount);
-    ModelAnimation* runAnim = LoadModelAnimations("resources/run.glb", &runCount);
-    ModelAnimation* jumpAnim = LoadModelAnimations("resources/jump.glb", &jumpCount);
-    
-    int animFrame = 0;
-    int currentAnim = 0; // 0 = Idle, 1 = Run, 2 = Jump
+    models["Player"] = LoadModel("resources/worker.glb"); 
 
+    int animCount = 0;
+    // Load the full animation array from the single worker.glb file
+    ModelAnimation* anims = LoadModelAnimations("resources/worker.glb", &animCount);
+
+    float animTimer = 0.0f;
+    int currentAnimState = 0; // 0: Idle, 1: Walk, 2: Run, 3: Roll, 4: Interact
+        
     RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
@@ -143,7 +143,7 @@ int main(void) {
                 if (lastReport.isFired) currentState = STATE_GAMEOVER_FIRED;
                 else { currentNight++; currentState = STATE_REVIEW; }
             }
-
+            bool isSprinting = IsKeyDown(KEY_LEFT_SHIFT);
             bool executeAction = false;
             int actionTargetIdx = -1;
 
@@ -193,13 +193,15 @@ int main(void) {
 
             } else if (!player.isStone && !player.isDead) {
                 Vector3 input = { 0.0f, 0.0f, 0.0f };
-                
-                float currentAccel = 8000.0f; 
-                float maxSpeed = 1200.0f;
+
+                float baseAccel = 6000.0f; 
+                // Sprinting increases max speed from 1200 to 1800
+                float maxSpeed = isSprinting ? 1200.0f : 300.0f; 
+                float currentAccel = isSprinting ? baseAccel * 1.5f : baseAccel;
 
                 if (grabbedEntityIndex != -1 && entities[grabbedEntityIndex].HasTag(TAG_HEAVY)) {
                     currentAccel = 3000.0f; 
-                    maxSpeed = 400.0f;
+                    maxSpeed = 200.0f;
                 }
 
                 if (IsKeyDown(KEY_W)) input.z -= 1.0f; if (IsKeyDown(KEY_S)) input.z += 1.0f;
@@ -359,25 +361,49 @@ int main(void) {
                 }
             }
 
-            // --- ANIMATION STATE MACHINE ---
-            int targetAnim = 0; // 0 = Idle
-            if (abs(player.velocity.y) > 0.1f) targetAnim = 2; // Jump state overrides everything
-            else if (Vector2Length({player.velocity.x, player.velocity.z}) > 10.0f) targetAnim = 1; // Run state
+            // --- UPDATED ANIMATION STATE MACHINE ---
+            int targetAnimState = 0; // Default to Idle
+            float speed = Vector2Length({player.velocity.x, player.velocity.z});
 
-            if (currentAnim != targetAnim) {
-                currentAnim = targetAnim;
-                animFrame = 0; // Reset to the start of the new animation
+            if (abs(player.velocity.y) > 5.0f) {
+                targetAnimState = 3; // Rolling (Jump)
+            } else if (speed > 20.0f) {
+                targetAnimState = isSprinting ? 2 : 1; // Run or Walk
+            } else if (IsKeyDown(KEY_F) || IsKeyDown(KEY_E)) {
+                targetAnimState = 4; // Interact
             }
 
-            ModelAnimation* activeAnim = nullptr;
-            if (currentAnim == 0 && idleCount > 0) activeAnim = idleAnim;
-            else if (currentAnim == 1 && runCount > 0) activeAnim = runAnim;
-            else if (currentAnim == 2 && jumpCount > 0) activeAnim = jumpAnim;
+            // If we changed states, reset the timer so the animation starts at frame 0
+            if (currentAnimState != targetAnimState) {
+                currentAnimState = targetAnimState;
+                animTimer = 0.0f;
+            }
 
-            if (activeAnim != nullptr) {
-                animFrame++;
-                if (animFrame >= activeAnim[0].frameCount) animFrame = 0;
-                UpdateModelAnimation(models["Player"], activeAnim[0], animFrame);
+            // Map our internal state to the index numbers you found
+            int activeIdx = idxIdle;
+            if (currentAnimState == 1) activeIdx = idxWalk;
+            else if (currentAnimState == 2) activeIdx = idxRun;
+            else if (currentAnimState == 3) activeIdx = idxRoll;
+            else if (currentAnimState == 4) activeIdx = idxInteract;
+
+            // --- Inside the Animation Update block ---
+            if (anims != nullptr && activeIdx < animCount) {
+                
+                // 1. Define a playback speed. 
+                // 30.0f is "real time". Try 45.0f or 60.0f for more energy.
+                float playbackSpeed = 45.0f; 
+
+                // Optional: Make the animation speed match the movement speed!
+                if (currentAnimState == 2) playbackSpeed = 60.0f; // Fast run
+                if (currentAnimState == 1) playbackSpeed = 50.0f; // Normal walk
+                if (currentAnimState == 3) playbackSpeed = 90.0f; // Fast roll
+
+                animTimer += dt * playbackSpeed; 
+                
+                float maxFrames = (float)anims[activeIdx].frameCount;
+                animTimer = fmod(animTimer, maxFrames); 
+                
+                UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 
             HazardVisuals hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves);
@@ -393,10 +419,7 @@ int main(void) {
     }
 
     // --- CLEANUP ---
-    if (idleAnim) UnloadModelAnimations(idleAnim, idleCount);
-    if (runAnim) UnloadModelAnimations(runAnim, runCount);
-    if (jumpAnim) UnloadModelAnimations(jumpAnim, jumpCount);
-    UnloadTexture(playerTex); // Clean up your texture!
+    if (anims) UnloadModelAnimations(anims, animCount);
 
     for (auto& pair : models) {
         UnloadModel(pair.second);
