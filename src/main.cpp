@@ -54,14 +54,35 @@ int main(void) {
     InitWindow(1280, 960, "Museum Tech Support - Phase 15");
     SetTargetFPS(60);
 
-    models["wall1"] = LoadModel("resources/wall1.glb");
-    models["wall1corner"] = LoadModel("resources/wall1corner.glb");
-    models["floor11"] = LoadModel("resources/floor11.glb");
-    models["stand2"] = LoadModel("resources/stand2.glb");
-    models["ticketstand"] = LoadModel("resources/ticketstand.glb");
-    models["ticketstandseat"] = LoadModel("resources/ticketstandseat.glb");
-    models["arch1"] = LoadModel("resources/arch1.glb");
-    // (You can easily add future models here just by typing models["Item Name"] = LoadModel(...); )
+    // --- LOAD ENVIRONMENT MODELS ---
+    const char* modelNames[] = {
+        "artifactsign2", "bench1", "bench2", "bench3", "desk", "fence", "floor11", "floor12", "floor21", "floor22", "floor31", "floor32", "floor41", "floor42", 
+        "glasscase", "light1", "light2", "painting1", "painting2", "paintinglight", "pillar1", "pillar2", "rope1", "rope2", "sign1", "sign2", "sign3", 
+        "stand1", "stand2", "stand3", "stand4", "ticketstand", "ticketstandseat", "wall1", "wall1corner", "wall2", "wall2corner", "wall3", "wall3corner", "wall4", "wall4corner", 
+        "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
+        "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
+        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic"
+    };
+    for (const char* mn : modelNames) {
+        models[mn] = LoadModel(TextFormat("resources/%s.glb", mn));
+    }
+
+    // --- LOAD PLAYER MODEL, TEXTURE, & ANIMATIONS ---
+    models["Player"] = LoadModel("resources/character.glb"); 
+    
+    // Apply the diffuse texture to all materials on the player model!
+    Texture2D playerTex = LoadTexture("resources/texture.png");
+    for (int i = 0; i < models["Player"].materialCount; i++) {
+        models["Player"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = playerTex;
+    }
+    
+    int idleCount = 0, runCount = 0, jumpCount = 0;
+    ModelAnimation* idleAnim = LoadModelAnimations("resources/idle.glb", &idleCount);
+    ModelAnimation* runAnim = LoadModelAnimations("resources/run.glb", &runCount);
+    ModelAnimation* jumpAnim = LoadModelAnimations("resources/jump.glb", &jumpCount);
+    
+    int animFrame = 0;
+    int currentAnim = 0; // 0 = Idle, 1 = Run, 2 = Jump
 
     RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
@@ -173,7 +194,6 @@ int main(void) {
             } else if (!player.isStone && !player.isDead) {
                 Vector3 input = { 0.0f, 0.0f, 0.0f };
                 
-                // MASSIVELY increased acceleration for chaotic feel!
                 float currentAccel = 8000.0f; 
                 float maxSpeed = 1200.0f;
 
@@ -182,7 +202,6 @@ int main(void) {
                     maxSpeed = 400.0f;
                 }
 
-                // MAP WASD TO 3D X/Z AXES
                 if (IsKeyDown(KEY_W)) input.z -= 1.0f; if (IsKeyDown(KEY_S)) input.z += 1.0f;
                 if (IsKeyDown(KEY_A)) input.x -= 1.0f; if (IsKeyDown(KEY_D)) input.x += 1.0f;
                 
@@ -190,9 +209,11 @@ int main(void) {
                     input = Vector3Normalize(input); player.facingDir = input;
                     player.velocity.x += input.x * currentAccel * dt; 
                     player.velocity.z += input.z * currentAccel * dt;
+                    
+                    // Update visual rotation of the character model
+                    player.stateValue = atan2(player.facingDir.x, player.facingDir.z) * RAD2DEG;
                 }
 
-                // SPEED CAPPING (To prevent sliding on ice forever)
                 Vector2 horizVel = { player.velocity.x, player.velocity.z };
                 if (Vector2Length(horizVel) > maxSpeed) {
                     horizVel = Vector2Scale(Vector2Normalize(horizVel), maxSpeed);
@@ -200,19 +221,15 @@ int main(void) {
                     player.velocity.z = horizVel.y;
                 }
 
-                // --- NEW: JUMP LOGIC ---
-                // Only allow jumping if the player is on the floor (y == 0 or resting on an object)
                 if (IsKeyPressed(KEY_SPACE) && player.velocity.y == 0.0f && grabbedEntityIndex == -1) {
-                    player.velocity.y = 800.0f; // Blast upward!
+                    player.velocity.y = 800.0f; 
                 }
-                // --- END JUMP LOGIC ---
 
                 if (grabbedEntityIndex != -1) entities[grabbedEntityIndex].isUsing = IsKeyDown(KEY_F);
 
                 if (IsKeyPressed(KEY_F)) {
                     bool environmentF = false;
                     
-                    // --- UPDATED: Loop through the interaction bounds list ---
                     std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
                     for (auto& b : pIntBoxList) {
                         b.min.x -= 40; b.max.x += 40; b.min.z -= 40; b.max.z += 40; b.max.y += 40;
@@ -322,7 +339,7 @@ int main(void) {
                 if (IsKeyPressed(KEY_SPACE) && grabbedEntityIndex != -1 && entities[grabbedEntityIndex].canThrow) {
                     entities[grabbedEntityIndex].isGrabbed = false; entities[grabbedEntityIndex].isUsing = false; 
                     entities[grabbedEntityIndex].velocity = Vector3Scale(player.facingDir, 1200.0f); 
-                    entities[grabbedEntityIndex].velocity.y = 450.0f; // Throwing arc gravity applied natively!
+                    entities[grabbedEntityIndex].velocity.y = 450.0f; 
                     if (entities[grabbedEntityIndex].HasTag(TAG_SANDALS)) entities[grabbedEntityIndex].isGlitching = true;
                     grabbedEntityIndex = -1;
                 }
@@ -342,6 +359,27 @@ int main(void) {
                 }
             }
 
+            // --- ANIMATION STATE MACHINE ---
+            int targetAnim = 0; // 0 = Idle
+            if (abs(player.velocity.y) > 0.1f) targetAnim = 2; // Jump state overrides everything
+            else if (Vector2Length({player.velocity.x, player.velocity.z}) > 10.0f) targetAnim = 1; // Run state
+
+            if (currentAnim != targetAnim) {
+                currentAnim = targetAnim;
+                animFrame = 0; // Reset to the start of the new animation
+            }
+
+            ModelAnimation* activeAnim = nullptr;
+            if (currentAnim == 0 && idleCount > 0) activeAnim = idleAnim;
+            else if (currentAnim == 1 && runCount > 0) activeAnim = runAnim;
+            else if (currentAnim == 2 && jumpCount > 0) activeAnim = jumpAnim;
+
+            if (activeAnim != nullptr) {
+                animFrame++;
+                if (animFrame >= activeAnim[0].frameCount) animFrame = 0;
+                UpdateModelAnimation(models["Player"], activeAnim[0], animFrame);
+            }
+
             HazardVisuals hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves);
             
             if (player.isStone || player.isDead) {
@@ -353,6 +391,13 @@ int main(void) {
             RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities);
         }
     }
+
+    // --- CLEANUP ---
+    if (idleAnim) UnloadModelAnimations(idleAnim, idleCount);
+    if (runAnim) UnloadModelAnimations(runAnim, runCount);
+    if (jumpAnim) UnloadModelAnimations(jumpAnim, jumpCount);
+    UnloadTexture(playerTex); // Clean up your texture!
+
     for (auto& pair : models) {
         UnloadModel(pair.second);
     }
