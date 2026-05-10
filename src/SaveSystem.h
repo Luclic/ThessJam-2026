@@ -10,8 +10,7 @@ inline void SaveGame(int currentNight, const std::vector<Entity>& entities) {
     out.write((char*)&count, sizeof(count));
     
     for (const auto& e : entities) {
-        out.write((char*)&e.position, sizeof(Vector2));
-        out.write((char*)&e.z, sizeof(float));
+        out.write((char*)&e.position, sizeof(Vector3));
         out.write((char*)&e.attachedTo, sizeof(int));
         out.write((char*)&e.isGlitching, sizeof(bool));
         out.write((char*)&e.isStone, sizeof(bool));
@@ -31,8 +30,7 @@ inline bool LoadGame(int& currentNight, std::vector<Entity>& entities) {
     if (count != entities.size()) return false; // Version mismatch, abort load
     
     for (auto& e : entities) {
-        in.read((char*)&e.position, sizeof(Vector2));
-        in.read((char*)&e.z, sizeof(float));
+        in.read((char*)&e.position, sizeof(Vector3));
         in.read((char*)&e.attachedTo, sizeof(int));
         in.read((char*)&e.isGlitching, sizeof(bool));
         in.read((char*)&e.isStone, sizeof(bool));

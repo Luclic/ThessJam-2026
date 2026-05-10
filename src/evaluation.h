@@ -82,7 +82,7 @@ inline ShiftReport EvaluateMuseum(const std::vector<Entity>& entities) {
                 // NEW: WET FLOOR SIGN OSHA COMPLIANCE CHECK
                 bool hasSign = false;
                 for (const auto& sign : entities) {
-                    if (sign.HasTag(TAG_WET_SIGN) && Vector2Distance(sign.position, cup->position) < cup->stateValue) hasSign = true;
+                    if (sign.HasTag(TAG_WET_SIGN) && Vector3Distance(sign.position, cup->position) < cup->stateValue) hasSign = true;
                 }
                 if (hasSign) {
                     report.reviews.push_back({"Holy Cup", SCORE_ADEQUATE, "Egyptian wing is flooded, but you placed a Wet Floor sign. OSHA compliance saved your job."});
@@ -212,7 +212,7 @@ inline ShiftReport EvaluateMuseum(const std::vector<Entity>& entities) {
             }
         }
     }
-    
+
     // Generate Final Verdict if somehow missed
     if (!report.isFired) {
         report.finalVerdict = "NIGHT SHIFT COMPLETE: The museum opens on time. See you tomorrow, Janitor.";

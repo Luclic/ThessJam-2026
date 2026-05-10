@@ -1,5 +1,6 @@
 #pragma once
 #include "raylib.h"
+#include "raymath.h"
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -21,38 +22,125 @@ enum ChemResult { CHEM_NONE, CHEM_USED_BUT_KEPT, CHEM_ATTACHED };
 
 struct Entity {
     std::string name;
-    Vector2 position;          
-    float z;                   
-    float zHeight;             
-    Vector2 velocity;          
-    float zVelocity;           
-    Vector2 facingDir;         
-    Rectangle movementBox;     
-    Rectangle interactionBox;  
-    Color color;
     
+    // --- TRUE 3D PHYSICS DATA ---
+    Vector3 position;          // X (Left/Right), Y (Up/Down), Z (Forward/Back)
+    Vector3 velocity;          
+    Vector3 facingDir;         
+    
+    // --- TRUE 3D PHYSICS DATA ---
+    std::vector<BoundingBox> boundsList;         // Supports multiple hitboxes per object!
+    std::vector<BoundingBox> interactBoundsList; // For interactions
+    
+    Color color; 
     bool canGrab;       
     bool canThrow;      
     bool canInteract;   
     bool isSolid;              
     bool isGrabbed;
     bool castsShadow;
-    bool is3DBlock;
+    bool is3DBlock; 
+    bool isStatic = false; 
     
     int attachedTo = -1; 
     bool isGlitching; 
     bool isStone;     
     bool isUsing = false; 
-    bool isDead = false; // New! For player zap death
+    bool isDead = false; 
     
     float stateTimer = 0.0f; 
-    float stateValue = 0.0f; // Multi-use (Water Radius, Fusebox Open/Closed state)
+    float stateValue = 0.0f; // Stores Rotation in Degrees!
     std::vector<Tag> tags;
 
     bool HasTag(Tag t) const { return std::find(tags.begin(), tags.end(), t) != tags.end(); }
     void AddTag(Tag t) { if (!HasTag(t)) tags.push_back(t); }
     void RemoveTag(Tag t) { tags.erase(std::remove(tags.begin(), tags.end(), t), tags.end()); }
 
-    Rectangle GetWorldMovementBox() const { return { position.x + movementBox.x, position.y + movementBox.y, movementBox.width, movementBox.height }; }
-    Rectangle GetWorldInteractionBox() const { return { position.x + interactionBox.x, position.y + interactionBox.y - z, interactionBox.width, interactionBox.height }; }
+    // --- TRUE AABB MATRIX ROTATION (SYNCED TO RAYLIB) ---
+    std::vector<BoundingBox> GetProjectedBounds(Vector3 offsetPos) const { 
+        std::vector<BoundingBox> result;
+        float rad = stateValue * DEG2RAD;
+        float cosR = cos(rad); float sinR = sin(rad);
+
+        for (const auto& b : boundsList) {
+            Vector3 corners[8] = {
+                {b.min.x, b.min.y, b.min.z}, {b.max.x, b.min.y, b.min.z},
+                {b.min.x, b.max.y, b.min.z}, {b.max.x, b.max.y, b.min.z},
+                {b.min.x, b.min.y, b.max.z}, {b.max.x, b.min.y, b.max.z},
+                {b.min.x, b.max.y, b.max.z}, {b.max.x, b.max.y, b.max.z}
+            };
+
+            Vector3 newMin = {99999, 99999, 99999};
+            Vector3 newMax = {-99999, -99999, -99999};
+
+            for(int i=0; i<8; ++i) {
+                // FIXED: Signs swapped to match Raylib's internal OpenGL rotation!
+                float rx = corners[i].x * cosR + corners[i].z * sinR;
+                float rz = -corners[i].x * sinR + corners[i].z * cosR;
+                
+                if(rx < newMin.x) newMin.x = rx; if(rx > newMax.x) newMax.x = rx;
+                if(corners[i].y < newMin.y) newMin.y = corners[i].y; if(corners[i].y > newMax.y) newMax.y = corners[i].y;
+                if(rz < newMin.z) newMin.z = rz; if(rz > newMax.z) newMax.z = rz;
+            }
+            result.push_back({
+                {offsetPos.x + newMin.x, offsetPos.y + newMin.y, offsetPos.z + newMin.z},
+                {offsetPos.x + newMax.x, offsetPos.y + newMax.y, offsetPos.z + newMax.z}
+            });
+        }
+        return result;
+    }
+    
+    std::vector<BoundingBox> GetWorldBounds() const { return GetProjectedBounds(position); }
+    
+    std::vector<BoundingBox> GetWorldInteractBounds() const { 
+        std::vector<BoundingBox> result;
+        float rad = stateValue * DEG2RAD;
+        float cosR = cos(rad); float sinR = sin(rad);
+
+        for (const auto& b : interactBoundsList) {
+            Vector3 corners[8] = {
+                {b.min.x, b.min.y, b.min.z}, {b.max.x, b.min.y, b.min.z},
+                {b.min.x, b.max.y, b.min.z}, {b.max.x, b.max.y, b.min.z},
+                {b.min.x, b.min.y, b.max.z}, {b.max.x, b.min.y, b.max.z},
+                {b.min.x, b.max.y, b.max.z}, {b.max.x, b.max.y, b.max.z}
+            };
+
+            Vector3 newMin = {99999, 99999, 99999};
+            Vector3 newMax = {-99999, -99999, -99999};
+
+            for(int i=0; i<8; ++i) {
+                // FIXED: Signs swapped here too!
+                float rx = corners[i].x * cosR + corners[i].z * sinR;
+                float rz = -corners[i].x * sinR + corners[i].z * cosR;
+                
+                if(rx < newMin.x) newMin.x = rx; if(rx > newMax.x) newMax.x = rx;
+                if(corners[i].y < newMin.y) newMin.y = corners[i].y; if(corners[i].y > newMax.y) newMax.y = corners[i].y;
+                if(rz < newMin.z) newMin.z = rz; if(rz > newMax.z) newMax.z = rz;
+            }
+            result.push_back({
+                {position.x + newMin.x, position.y + newMin.y, position.z + newMin.z},
+                {position.x + newMax.x, position.y + newMax.y, position.z + newMax.z}
+            });
+        }
+        return result;
+    }
 };
+
+// --- HELPER FOR COLLISION LOOPS ---
+inline bool CheckCollisionLists(const std::vector<BoundingBox>& listA, const std::vector<BoundingBox>& listB) {
+    for (const auto& a : listA) {
+        for (const auto& b : listB) {
+            if (CheckCollisionBoxes(a, b)) return true;
+        }
+    }
+    return false;
+}
+// ... [End of your Entity struct] ...
+
+const int GAME_WIDTH = 1600;
+const int GAME_HEIGHT = 1200; 
+
+// Placed here so main.cpp can use it to spawn holes and bubble mats dynamically!
+inline Entity MakeProp(std::string name, Vector3 pos, BoundingBox b, Color col, std::vector<Tag> tags) { 
+    return { name, pos, {0,0,0}, {0,0,1}, {b}, {b}, col, true, true, false, false, false, true, false, false, -1, false, false, false, false, 0.0f, 0.0f, tags }; 
+}

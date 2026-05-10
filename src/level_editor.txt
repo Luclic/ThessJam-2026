@@ -1,0 +1,438 @@
+#include "raylib.h"
+#include "raymath.h"
+#include "Entities.h"
+#include "Level.h"
+#include "Hitboxes_Export.h" // <-- The Editor now includes its own save file!
+#include <vector>
+#include <string>
+#include <unordered_map>
+#include <fstream>
+#include <iostream>
+#include <algorithm>
+
+#ifndef TILE_SIZE
+const float TILE_SIZE = 200.0f;
+#endif
+
+const float SNAP_GRID = 10.0f;
+const int UI_WIDTH = 450; 
+
+enum EditorMode { MODE_LEVEL, MODE_HITBOX };
+EditorMode currentMode = MODE_LEVEL;
+
+inline float Snap(float value, float step) { return std::round(value / step) * step; }
+
+// --- Global Dictionaries ---
+std::unordered_map<std::string, std::vector<BoundingBox>> globalHitboxes;
+std::unordered_map<std::string, ModelTweak> globalTweaks;
+std::vector<std::string> uniqueTypes;
+
+int currentPropIdx = 0;
+int currentBoxIdx = 0;
+
+struct HistoryState { std::vector<Entity> entities; };
+std::vector<HistoryState> undoHistory;
+
+void SaveState(const std::vector<Entity>& currentEnts) {
+    undoHistory.push_back({currentEnts});
+    if (undoHistory.size() > 50) undoHistory.erase(undoHistory.begin());
+}
+
+struct SpawnableProp { std::string name; std::string modelName; Color color; };
+std::vector<SpawnableProp> spawnList = {
+    {"Wall Panel", "wall1", GRAY}, {"Floor Tile", "floor11", LIGHTGRAY},
+    {"Archway", "arch1", GRAY}, {"Pedestal", "stand2", GRAY},
+    {"Ticket Stand", "ticketstand", BROWN}, {"Ticket Seat", "ticketstandseat", BROWN},
+    {"Boulder", "Sisyphus Boulder", DARKGRAY}, {"Display Vase", "Display Vase", ORANGE}
+};
+
+bool DoButton(Rectangle rect, const char* text, Color col = {60, 60, 70, 255}) {
+    Vector2 mouse = GetMousePosition();
+    bool hover = CheckCollisionPointRec(mouse, rect);
+    if (hover && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) DrawRectangleRec(rect, {40, 40, 50, 255});
+    else if (hover) DrawRectangleRec(rect, {80, 80, 90, 255});
+    else DrawRectangleRec(rect, col);
+    DrawRectangleLinesEx(rect, 2, BLACK);
+    DrawText(text, rect.x + (rect.width/2) - (MeasureText(text, 20)/2), rect.y + (rect.height/2) - 10, 20, WHITE);
+    return hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+void ExportHitboxes() {
+    std::ofstream out("Hitboxes_Export.h");
+    out << "#pragma once\n#include \"raylib.h\"\n#include <unordered_map>\n#include <vector>\n#include <string>\n\n";
+    
+    out << "inline std::unordered_map<std::string, std::vector<BoundingBox>> GetGlobalHitboxes() {\n    return {\n";
+    for (const auto& type : uniqueTypes) {
+        out << TextFormat("        {\"%s\", {\n", type.c_str());
+        for (const auto& b : globalHitboxes[type]) {
+            out << TextFormat("            {{%.1f, %.1f, %.1f}, {%.1f, %.1f, %.1f}},\n", b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z);
+        }
+        out << "        }},\n";
+    }
+    out << "    };\n}\n\n";
+
+    out << "struct ModelTweak { float scale; Vector3 offset; float rot; };\n";
+    out << "inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {\n    return {\n";
+    for (const auto& type : uniqueTypes) {
+        ModelTweak t = globalTweaks[type];
+        out << TextFormat("        {\"%s\", {%.1f, {%.1f, %.1f, %.1f}, %.1f}},\n", 
+            type.c_str(), t.scale, t.offset.x, t.offset.y, t.offset.z, t.rot);
+    }
+    out << "    };\n}\n";
+    out.close();
+    std::cout << "SUCCESS: Exported Hitboxes & Tweaks to Hitboxes_Export.h!\n";
+}
+
+void ExportLevel(const std::vector<Entity>& entities) {
+    std::ofstream out("Level_Export.h");
+    
+    // --- FIXED: Now includes your Hitboxes_Export.h file automatically ---
+    out << "#pragma once\n#include \"Entities.h\"\n#include \"Hitboxes_Export.h\"\n\n";
+    
+    out << "inline void InitLevel(std::vector<Entity>& e) {\n";
+    
+    // --- FIXED: Fetches the hitboxes for the main game to use ---
+    out << "    auto globalHitboxes = GetGlobalHitboxes();\n\n";
+    
+    for (const auto& ent : entities) {
+        out << TextFormat("    e.push_back({ \"%s\", {%.1f, %.1f, %.1f}, {0,0,0}, {0,0,1}, {}, {}, ", 
+            ent.name.c_str(), ent.position.x, ent.position.y, ent.position.z);
+        out << TextFormat("{%d,%d,%d,%d}, %s, %s, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s, %s, %.1f, %.1f, {} });\n",
+            ent.color.r, ent.color.g, ent.color.b, ent.color.a,
+            ent.canGrab?"true":"false", ent.canThrow?"true":"false", ent.canInteract?"true":"false",
+            ent.isSolid?"true":"false", ent.isGrabbed?"true":"false", ent.castsShadow?"true":"false",
+            ent.is3DBlock?"true":"false", ent.isStatic?"true":"false",
+            ent.attachedTo, ent.isGlitching?"true":"false", ent.isStone?"true":"false",
+            ent.isUsing?"true":"false", ent.isDead?"true":"false", ent.stateTimer, ent.stateValue);
+        
+        out << "    e.back().boundsList = globalHitboxes[\"" << ent.name << "\"];\n";
+        out << "    e.back().interactBoundsList = globalHitboxes[\"" << ent.name << "\"];\n";
+    }
+    out << "}\n"; out.close();
+    std::cout << "SUCCESS: Exported Level!\n";
+}
+
+int main(void) {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
+    InitWindow(1600, 900, "Museum Tech Support - MAP & HITBOX EDITOR");
+    SetTargetFPS(60);
+
+    std::unordered_map<std::string, Model> models;
+    models["wall1"] = LoadModel("resources/wall1.glb");
+    models["floor11"] = LoadModel("resources/floor11.glb");
+    models["stand2"] = LoadModel("resources/stand2.glb");
+    models["arch1"] = LoadModel("resources/arch1.glb");
+    models["ticketstand"] = LoadModel("resources/ticketstand.glb");
+    models["ticketstandseat"] = LoadModel("resources/ticketstandseat.glb");
+
+    std::vector<Entity> entities;
+    InitLevel(entities); 
+
+    // --- FIXED: Load saved tweaks from Hitboxes_Export.h on startup! ---
+    globalHitboxes = GetGlobalHitboxes();
+    globalTweaks = GetGlobalTweaks();
+    for (const auto& pair : globalHitboxes) {
+        if (std::find(uniqueTypes.begin(), uniqueTypes.end(), pair.first) == uniqueTypes.end()) {
+            uniqueTypes.push_back(pair.first);
+        }
+    }
+
+    entities.erase(std::remove_if(entities.begin(), entities.end(), [](const Entity& e){ return e.name == "PhysicsWall"; }), entities.end());
+    for (auto& e : entities) {
+        if (e.name == "wall1" || e.name == "arch1") {
+            if (e.boundsList.empty()) { e.boundsList.push_back({{-100, 0, -20}, {100, 100, 20}}); e.isSolid = true; }
+        }
+        if (globalHitboxes.find(e.name) == globalHitboxes.end()) {
+            globalHitboxes[e.name] = e.boundsList;
+            globalTweaks[e.name] = { 100.0f, {0,0,0}, 0.0f }; // Only applies to brand new models!
+            uniqueTypes.push_back(e.name);
+        }
+    }
+    SaveState(entities); 
+
+    Camera3D camera = { { 0.0f, 2500.0f, 1500.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f, CAMERA_PERSPECTIVE };
+    Camera3D iconCam = { { 200.0f, 150.0f, 200.0f }, { 0.0f, 50.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f, CAMERA_PERSPECTIVE };
+
+    std::vector<int> selectedIndices; 
+    std::vector<Entity> clipboard;
+    bool isDragging = false;
+    std::vector<Vector3> dragOffsets; 
+    bool justSavedState = false;
+
+    float hitCamAngle = 45.0f; float hitCamDist = 300.0f; float hitCamHeight = 200.0f;
+    int pendingSpawnIdx = -1; float pendingRot = 0.0f;
+
+    while (!WindowShouldClose()) {
+        float dt = GetFrameTime();
+        Vector2 mousePos = GetMousePosition();
+        Ray ray = GetMouseRay(mousePos, camera);
+        float t = -ray.position.y / ray.direction.y;
+        Vector3 groundHit = { ray.position.x + ray.direction.x * t, 0.0f, ray.position.z + ray.direction.z * t };
+
+        bool ctrlPressed = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        bool shiftPressed = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+        if (IsKeyPressed(KEY_ONE)) {
+            currentMode = (currentMode == MODE_LEVEL) ? MODE_HITBOX : MODE_LEVEL;
+            if (currentMode == MODE_LEVEL) {
+                for (auto& e : entities) if (globalHitboxes.count(e.name)) { e.boundsList = globalHitboxes[e.name]; e.interactBoundsList = globalHitboxes[e.name]; }
+            }
+        }
+        if (IsKeyPressed(KEY_FOUR)) ExportHitboxes();
+        if (IsKeyPressed(KEY_FIVE)) ExportLevel(entities);
+
+        if (currentMode == MODE_LEVEL) {
+            float camSpeed = 1500.0f * dt;
+            if (IsKeyDown(KEY_W)) { camera.position.z -= camSpeed; camera.target.z -= camSpeed; }
+            if (IsKeyDown(KEY_S)) { camera.position.z += camSpeed; camera.target.z += camSpeed; }
+            if (IsKeyDown(KEY_A)) { camera.position.x -= camSpeed; camera.target.x -= camSpeed; }
+            if (IsKeyDown(KEY_D)) { camera.position.x += camSpeed; camera.target.x += camSpeed; }
+            camera.position.y -= GetMouseWheelMove() * 300.0f;
+
+            if (ctrlPressed && IsKeyPressed(KEY_Z) && undoHistory.size() > 1) {
+                undoHistory.pop_back(); entities = undoHistory.back().entities; selectedIndices.clear(); pendingSpawnIdx = -1;
+            }
+            if (ctrlPressed && IsKeyPressed(KEY_C) && !selectedIndices.empty()) {
+                clipboard.clear(); for (int idx : selectedIndices) clipboard.push_back(entities[idx]);
+            }
+            if (ctrlPressed && IsKeyPressed(KEY_V) && !clipboard.empty()) {
+                SaveState(entities); selectedIndices.clear();
+                Vector3 centerPoint = clipboard[0].position; 
+                for (auto& clipEnt : clipboard) {
+                    Entity newEnt = clipEnt;
+                    Vector3 offset = Vector3Subtract(clipEnt.position, centerPoint);
+                    newEnt.position = Vector3Add(groundHit, offset);
+                    newEnt.position.x = Snap(newEnt.position.x, SNAP_GRID); newEnt.position.z = Snap(newEnt.position.z, SNAP_GRID);
+                    entities.push_back(newEnt); selectedIndices.push_back(entities.size() - 1);
+                }
+            }
+
+            if (mousePos.x > UI_WIDTH && pendingSpawnIdx == -1) { 
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    int clickedIdx = -1; float closestDist = 99999.0f;
+                    for (size_t i = 0; i < entities.size(); ++i) {
+                        std::vector<BoundingBox> projectedBounds = entities[i].GetWorldBounds();
+                        bool hit = false; float hitDist = 99999.0f;
+                        for(const auto& b : projectedBounds) {
+                            RayCollision col = GetRayCollisionBox(ray, b);
+                            if (col.hit && col.distance < hitDist) { hitDist = col.distance; hit = true; }
+                        }
+                        if (hit && hitDist < closestDist) { closestDist = hitDist; clickedIdx = i; }
+                    }
+                    if (clickedIdx != -1) {
+                        bool alreadySelected = std::find(selectedIndices.begin(), selectedIndices.end(), clickedIdx) != selectedIndices.end();
+                        if (shiftPressed) { if (!alreadySelected) selectedIndices.push_back(clickedIdx); } 
+                        else if (!alreadySelected) { selectedIndices.clear(); selectedIndices.push_back(clickedIdx); }
+                        isDragging = true; justSavedState = false; dragOffsets.clear();
+                        for (int idx : selectedIndices) dragOffsets.push_back(Vector3Subtract(entities[idx].position, groundHit));
+                    } else if (!shiftPressed) selectedIndices.clear();
+                }
+
+                if (isDragging && !selectedIndices.empty()) {
+                    if (!justSavedState) { SaveState(entities); justSavedState = true; } 
+                    for (size_t i = 0; i < selectedIndices.size(); ++i) {
+                        Vector3 newPos = Vector3Add(groundHit, dragOffsets[i]);
+                        entities[selectedIndices[i]].position.x = Snap(newPos.x, SNAP_GRID);
+                        entities[selectedIndices[i]].position.z = Snap(newPos.z, SNAP_GRID);
+                    }
+                }
+                if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) isDragging = false;
+
+                if (!selectedIndices.empty() && IsKeyPressed(KEY_R)) {
+                    SaveState(entities);
+                    for (int idx : selectedIndices) {
+                        entities[idx].stateValue += 90.0f; if (entities[idx].stateValue >= 360.0f) entities[idx].stateValue -= 360.0f;
+                    }
+                }
+
+                if (!selectedIndices.empty() && (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE))) {
+                    SaveState(entities);
+                    std::sort(selectedIndices.rbegin(), selectedIndices.rend()); 
+                    for (int idx : selectedIndices) entities.erase(entities.begin() + idx);
+                    selectedIndices.clear(); isDragging = false;
+                }
+            }
+
+            if (pendingSpawnIdx != -1) {
+                if (IsKeyPressed(KEY_R)) { pendingRot += 90.0f; if(pendingRot >= 360.0f) pendingRot -= 360.0f; }
+                if (mousePos.x > UI_WIDTH && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    SaveState(entities);
+                    std::string mName = spawnList[pendingSpawnIdx].modelName;
+                    Entity newEnt = { mName, {Snap(groundHit.x, SNAP_GRID), 0, Snap(groundHit.z, SNAP_GRID)}, {0,0,0}, {0,0,1}, 
+                                      globalHitboxes[mName], globalHitboxes[mName], 
+                                      spawnList[pendingSpawnIdx].color, false, false, false, true, false, true, false, false, 
+                                      -1, false, false, false, false, 0.0f, pendingRot, {} };
+                    if (mName == "wall1" || mName == "floor11" || mName == "arch1") newEnt.isStatic = true;
+                    entities.push_back(newEnt);
+                    selectedIndices.clear(); selectedIndices.push_back(entities.size() - 1);
+                    pendingSpawnIdx = -1;
+                }
+                if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) || IsKeyPressed(KEY_ESCAPE)) pendingSpawnIdx = -1;
+            }
+
+        } else {
+            if (mousePos.x > UI_WIDTH) {
+                if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) { hitCamAngle -= GetMouseDelta().x * 0.5f; hitCamHeight += GetMouseDelta().y * 1.0f; }
+                hitCamDist -= GetMouseWheelMove() * 30.0f; if (hitCamDist < 50.0f) hitCamDist = 50.0f;
+            }
+        }
+
+        BeginDrawing();
+        ClearBackground({35, 35, 40, 255});
+
+        if (currentMode == MODE_LEVEL) {
+            BeginMode3D(camera);
+            DrawGrid(100, TILE_SIZE); 
+
+            for (size_t i = 0; i < entities.size(); ++i) {
+                Entity& e = entities[i];
+                auto modIt = models.find(e.name);
+                
+                if (modIt != models.end()) {
+                    ModelTweak& tweak = globalTweaks[e.name];
+                    
+                    float rad = e.stateValue * DEG2RAD;
+                    float cosR = cos(rad); float sinR = sin(rad);
+                    Vector3 rotatedOffset = {
+                        tweak.offset.x * cosR + tweak.offset.z * sinR,
+                        tweak.offset.y,
+                        -tweak.offset.x * sinR + tweak.offset.z * cosR
+                    };
+                    
+                    Vector3 pos3D = Vector3Add(e.position, rotatedOffset);
+                    Vector3 vScale = {tweak.scale, tweak.scale, tweak.scale};
+                    DrawModelEx(modIt->second, pos3D, {0, 1, 0}, e.stateValue + tweak.rot, vScale, WHITE);
+                } else {
+                    std::vector<BoundingBox> projected = e.GetWorldBounds();
+                    for(const auto& b : projected) {
+                        Vector3 size = { b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z };
+                        if(size.x > 0 && size.y > 0 && size.z > 0) {
+                            Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
+                            DrawCubeV(center, size, Fade(e.color, 0.8f)); DrawCubeWiresV(center, size, BLACK);
+                        }
+                    }
+                }
+
+                if (std::find(selectedIndices.begin(), selectedIndices.end(), i) != selectedIndices.end()) {
+                    std::vector<BoundingBox> projected = e.GetWorldBounds();
+                    for(const auto& b : projected) {
+                        Vector3 size = { b.max.x - b.min.x + 2.0f, b.max.y - b.min.y + 2.0f, b.max.z - b.min.z + 2.0f };
+                        Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
+                        DrawCubeWiresV(center, size, GREEN);
+                    }
+                }
+            }
+
+            if (pendingSpawnIdx != -1) {
+                Vector3 snapHit = { Snap(groundHit.x, SNAP_GRID), 0.0f, Snap(groundHit.z, SNAP_GRID) };
+                auto modIt = models.find(spawnList[pendingSpawnIdx].modelName);
+                if (modIt != models.end()) DrawModelEx(modIt->second, snapHit, {0, 1, 0}, pendingRot, {100, 100, 100}, Fade(WHITE, 0.6f));
+                else { DrawCube(snapHit, 40, 40, 40, Fade(spawnList[pendingSpawnIdx].color, 0.6f)); }
+            }
+
+            EndMode3D();
+
+            DrawRectangle(0, 0, UI_WIDTH, GetScreenHeight(), {20, 20, 25, 240});
+            DrawRectangleLines(UI_WIDTH, 0, 2, GetScreenHeight(), WHITE);
+            DrawText("LEVEL EDITOR", 20, 20, 40, WHITE);
+            DrawText("1: SWITCH TO HITBOX MODE", 20, 80, 20, YELLOW);
+            DrawText("WASD/Scroll: Camera", 20, 120, 20, LIGHTGRAY);
+            DrawText("Shift+Click: Multi-Select", 20, 145, 20, LIGHTGRAY);
+            DrawText("Ctrl+C/V: Copy/Paste", 20, 170, 20, LIGHTGRAY);
+            DrawText("Ctrl+Z: Undo", 20, 195, 20, LIGHTGRAY);
+            DrawText("R: Rotate Selected/Ghost", 20, 220, 20, LIGHTGRAY);
+            DrawText("5: EXPORT MAP", 20, 255, 30, GREEN);
+
+            float btnY = 310.0f;
+            for (size_t i = 0; i < spawnList.size(); ++i) {
+                Rectangle btn = { 20, btnY, (float)UI_WIDTH - 40, 100 }; 
+                Color btnColor = {40, 40, 50, 255};
+                if (pendingSpawnIdx == i) btnColor = {80, 80, 90, 255}; 
+                else if (CheckCollisionPointRec(mousePos, btn)) {
+                    btnColor = {60, 60, 70, 255};
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { pendingSpawnIdx = i; pendingRot = 0.0f; }
+                }
+
+                DrawRectangleRec(btn, btnColor); DrawRectangleLinesEx(btn, 2, BLACK);
+                
+                BeginScissorMode(btn.x, btn.y, btn.width, btn.height);
+                BeginMode3D(iconCam);
+                auto modIt = models.find(spawnList[i].modelName);
+                if (modIt != models.end()) DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
+                else { DrawCube({0,50,0}, 60, 60, 60, spawnList[i].color); DrawCubeWires({0,50,0}, 60, 60, 60, BLACK); }
+                EndMode3D(); EndScissorMode();
+                
+                DrawText(spawnList[i].name.c_str(), btn.x + 15, btn.y + 15, 30, RAYWHITE);
+                btnY += 110.0f;
+            }
+            
+        } else {
+            std::string activeType = uniqueTypes[currentPropIdx];
+            std::vector<BoundingBox>& boxes = globalHitboxes[activeType];
+            ModelTweak& tweak = globalTweaks[activeType];
+
+            if (currentBoxIdx >= boxes.size()) currentBoxIdx = 0;
+
+            Camera3D hitCam = { 0 };
+            hitCam.position.x = cos(hitCamAngle * DEG2RAD) * hitCamDist; hitCam.position.z = sin(hitCamAngle * DEG2RAD) * hitCamDist; hitCam.position.y = hitCamHeight;
+            hitCam.target = {0.0f, 50.0f, 0.0f}; hitCam.up = {0.0f, 1.0f, 0.0f}; hitCam.fovy = 45.0f; hitCam.projection = CAMERA_PERSPECTIVE;
+
+            BeginMode3D(hitCam);
+            DrawGrid(10, 50.0f);
+
+            auto modIt = models.find(activeType);
+            Vector3 vScale = {tweak.scale, tweak.scale, tweak.scale};
+            if (modIt != models.end()) DrawModelEx(modIt->second, tweak.offset, {0,1,0}, tweak.rot, vScale, WHITE);
+            else DrawCube(tweak.offset, 40, 40, 40, GRAY);
+
+            for (size_t i = 0; i < boxes.size(); ++i) {
+                Vector3 size = { boxes[i].max.x - boxes[i].min.x, boxes[i].max.y - boxes[i].min.y, boxes[i].max.z - boxes[i].min.z };
+                Vector3 center = { boxes[i].min.x + size.x/2.0f, boxes[i].min.y + size.y/2.0f, boxes[i].min.z + size.z/2.0f };
+                DrawCubeWiresV(center, size, (i == currentBoxIdx) ? GREEN : DARKGRAY); 
+                if (i == currentBoxIdx) DrawCubeV(center, size, {0, 255, 0, 40});
+            }
+            EndMode3D();
+
+            DrawRectangle(0, 0, UI_WIDTH + 100, GetScreenHeight(), {20, 20, 25, 240});
+            DrawText("HITBOX EDITOR", 20, 20, 40, WHITE);
+            DrawText("1: RETURN & APPLY HITBOXES", 20, 80, 25, YELLOW);
+            DrawText("4: EXPORT Hitboxes_Export.h", 20, 115, 25, GREEN);
+            DrawText("Right Click + Drag: Orbit Camera", 20, 150, 20, LIGHTGRAY);
+
+            DrawText("Select Prop:", 20, 200, 30, WHITE);
+            if (DoButton({20, 240, 60, 50}, "<")) { currentPropIdx--; if(currentPropIdx < 0) currentPropIdx = uniqueTypes.size()-1; currentBoxIdx = 0; }
+            DrawText(activeType.c_str(), 100, 250, 35, SKYBLUE);
+            if (DoButton({UI_WIDTH + 20, 240, 60, 50}, ">")) { currentPropIdx++; if(currentPropIdx >= uniqueTypes.size()) currentPropIdx = 0; currentBoxIdx = 0; }
+
+            float py = 320.0f;
+            DrawText("Hitboxes:", 20, py, 25, GRAY); py+=40;
+            if (DoButton({20, py, 50, 40}, "<")) { currentBoxIdx--; if(currentBoxIdx < 0) currentBoxIdx = boxes.size()-1; }
+            DrawText(TextFormat("Box %d of %d", currentBoxIdx + 1, boxes.size()), 90, py+5, 25, WHITE);
+            if (DoButton({250, py, 50, 40}, ">")) { currentBoxIdx++; if(currentBoxIdx >= boxes.size()) currentBoxIdx = 0; }
+            
+            if (DoButton({320, py, 80, 40}, "[+] Box")) { boxes.push_back({{-10,0,-10}, {10,20,10}}); currentBoxIdx = boxes.size()-1; }
+            if (boxes.size() > 1 && DoButton({420, py, 80, 40}, "[-] Box")) { boxes.erase(boxes.begin() + currentBoxIdx); currentBoxIdx = 0; }
+            py+=60;
+
+            BoundingBox& b = boxes[currentBoxIdx];
+            DrawText("Adjust Minimums:", 20, py, 25, GRAY); py+=40;
+            DrawText(TextFormat("Min X: %.1f", b.min.x), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.min.x -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.min.x += 5.0f; py+=50;
+            DrawText(TextFormat("Min Y: %.1f", b.min.y), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.min.y -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.min.y += 5.0f; py+=50;
+            DrawText(TextFormat("Min Z: %.1f", b.min.z), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.min.z -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.min.z += 5.0f; py+=70;
+
+            DrawText("Adjust Maximums:", 20, py, 25, GRAY); py+=40;
+            DrawText(TextFormat("Max X: %.1f", b.max.x), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.max.x -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.max.x += 5.0f; py+=50;
+            DrawText(TextFormat("Max Y: %.1f", b.max.y), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.max.y -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.max.y += 5.0f; py+=50;
+            DrawText(TextFormat("Max Z: %.1f", b.max.z), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.max.z -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.max.z += 5.0f; py+=70;
+
+            DrawText("Visual Tweaks (Scale/Offset):", 20, py, 25, GRAY); py+=40;
+            DrawText(TextFormat("Scale (All): %.1f", tweak.scale), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.scale -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.scale += 5.0f; py+=50;
+            DrawText(TextFormat("Offset X: %.1f", tweak.offset.x), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.offset.x -= 2.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.offset.x += 2.0f; py+=50;
+            DrawText(TextFormat("Offset Y: %.1f", tweak.offset.y), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.offset.y -= 2.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.offset.y += 2.0f; py+=50;
+            DrawText(TextFormat("Offset Z: %.1f", tweak.offset.z), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.offset.z -= 2.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.offset.z += 2.0f; py+=50;
+        }
+        EndDrawing();
+    }
+    for (auto& pair : models) UnloadModel(pair.second);
+    CloseWindow(); return 0;
+}

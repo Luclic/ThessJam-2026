@@ -1,16 +1,20 @@
 #pragma once
 #include "raylib.h"
+#include "raymath.h"
 #include "Entities.h"
 #include "Level.h"
 #include "GameSystems.h"
+#include "Hitboxes_Export.h" // This provides GetGlobalTweaks() and ModelTweak!
 #include <vector>
 #include <algorithm>
+#include <unordered_map>
+#include <string>
 
 inline Color DarkenColor(Color c, float amount) { return { (unsigned char)(c.r - c.r*amount), (unsigned char)(c.g - c.g*amount), (unsigned char)(c.b - c.b*amount), c.a }; }
 
-inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt, const std::vector<Entity>& entities, const Entity& player, int grabbedEntityIndex, const HazardVisuals& hazVis) {
+inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt, const std::vector<Entity>& entities, const Entity& player, int grabbedEntityIndex, const HazardVisuals& hazVis, const std::unordered_map<std::string, Model>& models) {
     int currentRoomX = (int)std::floor((player.position.x) / GAME_WIDTH); 
-    int currentRoomY = (int)std::floor((player.position.y) / GAME_HEIGHT);
+    int currentRoomY = (int)std::floor((player.position.z) / GAME_HEIGHT); 
     camera.target.x += (currentRoomX * GAME_WIDTH - camera.target.x) * 5.0f * dt; 
     camera.target.y += (currentRoomY * GAME_HEIGHT - camera.target.y) * 5.0f * dt;
 
@@ -19,69 +23,85 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     std::sort(renderList.begin(), renderList.end(), [](const Entity* a, const Entity* b) { return (a->position.y + (a->isGrabbed ? 0.1f : 0.0f)) < (b->position.y + (b->isGrabbed ? 0.1f : 0.0f)); });
 
     BeginTextureMode(renderTarget); 
-    ClearBackground(RAYWHITE); 
+    ClearBackground({35, 35, 40, 255}); 
+    
     BeginMode2D(camera);
-    
-    for (int i = -1600; i < 4800; i += 100) DrawLine(i, -1200, i, 2400, LIGHTGRAY);
-    for (int i = -1200; i < 2400; i += 100) DrawLine(-1600, i, 4800, i, LIGHTGRAY);
+    for (int i = -4000; i < 8000; i += 200) { DrawLine(i, -4000, i, 8000, {55, 55, 60, 255}); DrawLine(-4000, i, 8000, i, {55, 55, 60, 255}); }
+    EndMode2D();
 
-    for (const auto& e : entities) if (e.HasTag(TAG_WATER_SOURCE) && e.stateValue > 0.0f) DrawEllipse(e.position.x, e.position.y, e.stateValue, e.stateValue * 0.6f, {0, 121, 241, 150});
-    for (const auto& e : entities) {
-        if (e.HasTag(TAG_BANSHEE_STONE) && e.stateValue > 0.0f) {
-            float alpha = std::max(0.0f, 255.0f - (e.stateValue / 800.0f) * 255.0f);
-            DrawCircleLines(e.position.x, e.position.y - e.z, e.stateValue, {200, 100, 255, (unsigned char)alpha});
-            DrawCircleLines(e.position.x, e.position.y - e.z, e.stateValue * 0.5f, {200, 100, 255, (unsigned char)alpha});
-        }
-    }
-    
-    // Flashlight Cone
-    for (const auto& e : entities) {
-        if (e.isUsing && e.HasTag(TAG_FLASHLIGHT)) {
-            Vector2 dir = player.facingDir; Vector2 perp = { -dir.y, dir.x }; 
-            Vector2 fl1 = e.position; 
-            Vector2 fl2 = { e.position.x + dir.x * 600.0f + perp.x * 300.0f, e.position.y + dir.y * 600.0f + perp.y * 300.0f }; 
-            Vector2 fl3 = { e.position.x + dir.x * 600.0f - perp.x * 300.0f, e.position.y + dir.y * 600.0f - perp.y * 300.0f };
-            DrawTriangle(fl1, fl2, fl3, { 255, 255, 200, 100 }); 
-        }
-    }
+    Camera3D cam3D = { 0 };
+    cam3D.position = (Vector3){ camera.target.x + GAME_WIDTH/2.0f, 1500.0f, camera.target.y + GAME_HEIGHT/2.0f + 800.0f }; 
+    cam3D.target = (Vector3){ camera.target.x + GAME_WIDTH/2.0f, 0.0f, camera.target.y + GAME_HEIGHT/2.0f };      
+    cam3D.up = (Vector3){ 0.0f, 1.0f, 0.0f }; 
+    cam3D.fovy = 55.0f; 
+    cam3D.projection = CAMERA_PERSPECTIVE;
 
-    if (hazVis.drawingBeam) DrawTriangle(hazVis.beamP1, hazVis.beamP2, hazVis.beamP3, { 0, 255, 0, 80 }); 
-    if (hazVis.drawingExtinguisher) DrawTriangle(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); 
+    BeginMode3D(cam3D);
+    Vector2 camCenter = { camera.target.x + GAME_WIDTH/2.0f, camera.target.y + GAME_HEIGHT/2.0f };
+    
+    // Fetch the tweaks exported from your editor!
+    auto globalTweaks = GetGlobalTweaks();
 
     for (const Entity* e : renderList) {
         if (e->color.a < 255) continue; 
-        if (e->castsShadow && e->movementBox.width > 0 && !e->isGrabbed && e->attachedTo == -1) DrawEllipse(e->position.x, e->position.y, e->movementBox.width * 0.6f, e->movementBox.height * 0.8f, {0, 0, 0, 80});
+        if (Vector2Distance({e->position.x, e->position.z}, camCenter) > 2500.0f) continue;
 
-        Color drawCol = e->color;
-        if (e->HasTag(TAG_FUSEBOX)) drawCol = (e->stateValue > 0.5f) ? GREEN : RED; 
-        if (e->HasTag(TAG_WATER_SOURCE) && e->isStone) drawCol = SKYBLUE; // Frozen Ice!
-        if (e->HasTag(TAG_HOLE) && e->stateValue > 0.5f) drawCol = LIGHTGRAY; // Taped Hole!
-
-        if (e->is3DBlock && e->zHeight > 0) {
-            Rectangle frontFace = { e->position.x + e->movementBox.x, e->position.y + e->movementBox.y - e->zHeight - e->z, e->movementBox.width, e->zHeight };
-            DrawRectangleRec(frontFace, DarkenColor(drawCol, 0.4f)); DrawRectangleLinesEx(frontFace, 2.0f, BLACK);
-            Rectangle topFace = { e->position.x + e->movementBox.x, e->position.y + e->movementBox.y - e->zHeight - e->z, e->movementBox.width, e->movementBox.height };
-            DrawRectangleRec(topFace, drawCol); DrawRectangleLinesEx(topFace, 2.0f, BLACK);
+        auto modIt = models.find(e->name);
+        if (modIt != models.end()) {
+            ModelTweak tweak = globalTweaks[e->name];
+            float rad = e->stateValue * DEG2RAD;
+            float cosR = cos(rad); float sinR = sin(rad);
+            Vector3 rotatedOffset = { tweak.offset.x * cosR + tweak.offset.z * sinR, tweak.offset.y, -tweak.offset.x * sinR + tweak.offset.z * cosR };
+            Vector3 pos3D = Vector3Add(e->position, rotatedOffset);
+            float finalRot = tweak.rot + e->stateValue; 
+            
+            // Explicitly cast to Vector3 to satisfy the compiler
+            Vector3 finalScale = (Vector3){tweak.scale, tweak.scale, tweak.scale};
+            if (e->HasTag(TAG_DOOR_1) || e->HasTag(TAG_DOOR_2) || e->HasTag(TAG_DOOR_3) || e->HasTag(TAG_DOOR_4) || e->HasTag(TAG_DOOR_5)) {
+                finalScale = (Vector3){ tweak.scale * 0.5f, tweak.scale * 0.5f, tweak.scale * 0.5f };
+            }
+            DrawModelEx(modIt->second, pos3D, {0, 1, 0}, finalRot, finalScale, WHITE);
         } else {
-            Rectangle drawRec = e->GetWorldInteractionBox(); DrawRectangleRec(drawRec, drawCol); DrawRectangleLinesEx(drawRec, 2.0f, BLACK); 
+            Color drawCol = e->color;
+            if (e->HasTag(TAG_FUSEBOX)) drawCol = (e->stateValue > 0.5f) ? GREEN : RED; 
+            if (e->HasTag(TAG_WATER_SOURCE) && e->isStone) drawCol = SKYBLUE; 
+            if (e->HasTag(TAG_HOLE) && e->stateValue > 0.5f) drawCol = LIGHTGRAY; 
+
+            std::vector<BoundingBox> projected = e->GetWorldBounds();
+            for(const auto& b : projected) {
+                Vector3 size = { b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z };
+                if (size.x > 0 && size.y > 0 && size.z > 0 && e->name != "PhysicsWall" && e->name != "wall1") {
+                    Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
+                    DrawCubeV(center, size, drawCol); DrawCubeWiresV(center, size, BLACK);
+                }
+            }
         }
-        if (e->name != "Wall" && e->name != "Door" && e->name != "Player" && e->name != "Pedestal") DrawText(e->name.c_str(), e->position.x - (MeasureText(e->name.c_str(), 10) / 2), e->GetWorldInteractionBox().y - 15, 10, BLACK);
+
+        if (e->castsShadow && !e->isGrabbed && e->attachedTo == -1) DrawCylinder({e->position.x, 2.0f, e->position.z}, 25.0f, 25.0f, 0.1f, 12, {0, 0, 0, 80});
+        if (e->HasTag(TAG_WATER_SOURCE) && e->stateValue > 0.0f) DrawCylinder({e->position.x, 1.0f, e->position.z}, e->stateValue, e->stateValue, 0.1f, 16, {0, 121, 241, 150});
+        if (e->HasTag(TAG_BANSHEE_STONE) && e->stateValue > 0.0f) DrawCylinderWires({e->position.x, e->position.y, e->position.z}, e->stateValue, e->stateValue, 1.0f, 16, {200, 100, 255, (unsigned char)(std::max(0.0f, 255.0f - (e->stateValue / 800.0f) * 255.0f))});
+        
+        if (e->isUsing && e->HasTag(TAG_FLASHLIGHT)) {
+            Vector3 dir = player.facingDir; Vector3 perp = { -dir.z, 0.0f, dir.x }; 
+            Vector3 fl2 = { e->position.x + dir.x * 600.0f + perp.x * 300.0f, e->position.y, e->position.z + dir.z * 600.0f + perp.z * 300.0f }; 
+            Vector3 fl3 = { e->position.x + dir.x * 600.0f - perp.x * 300.0f, e->position.y, e->position.z + dir.z * 600.0f - perp.z * 300.0f };
+            DrawTriangle3D(e->position, fl2, fl3, { 255, 255, 200, 100 }); DrawTriangle3D(e->position, fl3, fl2, { 255, 255, 200, 100 }); 
+        }
     }
 
-    // --- Render Room Darkness ---
+    if (hazVis.drawingBeam) { DrawTriangle3D(hazVis.beamP1, hazVis.beamP2, hazVis.beamP3, { 0, 255, 0, 80 }); DrawTriangle3D(hazVis.beamP1, hazVis.beamP3, hazVis.beamP2, { 0, 255, 0, 80 }); }
+    if (hazVis.drawingExtinguisher) { DrawTriangle3D(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); DrawTriangle3D(hazVis.extP1, hazVis.extP3, hazVis.extP2, { 255, 255, 255, 150 }); }
+    EndMode3D();
+
+    BeginMode2D(camera);
     for (const auto& e : entities) {
         if (e.HasTag(TAG_LIGHTSWITCH) && e.stateValue < 0.5f) {
-            int rx = (int)std::floor(e.position.x / GAME_WIDTH);
-            int ry = (int)std::floor(e.position.y / GAME_HEIGHT);
-            
-            // Check if player is holding flashlight to cut through darkness
+            int rx = (int)std::floor(e.position.x / GAME_WIDTH); int ry = (int)std::floor(e.position.z / GAME_HEIGHT);
             bool hasFlashlight = false;
             for(const auto& item : entities) if(item.isGrabbed && item.isUsing && item.HasTag(TAG_FLASHLIGHT)) hasFlashlight = true;
-            
             DrawRectangle(rx * GAME_WIDTH, ry * GAME_HEIGHT, GAME_WIDTH, GAME_HEIGHT, {0, 0, 0, (unsigned char)(hasFlashlight ? 180 : 230)});
         }
     }
-
     EndMode2D(); 
     EndTextureMode();
 }
@@ -94,17 +114,18 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
     Rectangle destRec = { (GetScreenWidth() - ((float)GAME_WIDTH * scale)) * 0.5f, (GetScreenHeight() - ((float)GAME_HEIGHT * scale)) * 0.5f, (float)GAME_WIDTH * scale, (float)GAME_HEIGHT * scale };
     DrawTexturePro(renderTarget.texture, sourceRec, destRec, { 0, 0 }, 0.0f, WHITE);
 
+    DrawFPS(GetScreenWidth() - 100, 10);
+
     int elapsedHours = (int)(shiftTimer / secondsPerHour);
     int displayHour = (12 + elapsedHours) % 12;
     if (displayHour == 0) displayHour = 12;
-    DrawText(TextFormat("%02d:00 AM", displayHour), GetScreenWidth() - 150, 20, 30, YELLOW);
+    DrawText(TextFormat("%02d:00 AM", displayHour), GetScreenWidth() - 150, 70, 30, YELLOW);
 
     DrawText("WASD: Move | 1-5: Doors | E: Grab | HOLD F: Use | PRESS F: Equip | SPACE: Throw | P/I/O/K: Triggers", 10, 10, 20, WHITE);
     
     if (player.isStone) DrawText("PETRIFIED!", 10, 40, 30, RED);
     if (player.isDead) DrawText("ZAPPED TO DEATH!", 10, 70, 30, ORANGE);
 
-    // DRAW TOOL USES
     for (const auto& e : entities) {
         if (e.isGrabbed && (e.HasTag(TAG_TAPE) || e.HasTag(TAG_BUBBLE_WRAP))) {
             DrawText(TextFormat("%s USES LEFT: %d", e.name.c_str(), (int)e.stateValue), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (e.stateValue > 0) ? GREEN : RED);

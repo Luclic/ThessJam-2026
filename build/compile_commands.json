@@ -42,6 +42,31 @@
       "-std=c++17",
       "-c",
       "-o",
+      "obj/x64/Debug/gamejam/Hitboxes_Export.o",
+      "../../src/Hitboxes_Export.h"
+    ],
+    "directory": "C:/Users/micha/Desktop/Projects/gamejam/build/build_files",
+    "file": "C:/Users/micha/Desktop/Projects/gamejam/src/Hitboxes_Export.h",
+    "output": "C:/Users/micha/Desktop/Projects/gamejam/build/build_files/obj/x64/Debug/gamejam/Hitboxes_Export.o"
+  },
+  {
+    "arguments": [
+      "g++",
+      "-MD",
+      "-MP",
+      "-DDEBUG",
+      "-DPLATFORM_DESKTOP",
+      "-DGRAPHICS_API_OPENGL_33",
+      "-D_WIN32",
+      "-I../../src",
+      "-I../../include",
+      "-I../external/raylib-master/src",
+      "-m64",
+      "-Wshadow",
+      "-g",
+      "-std=c++17",
+      "-c",
+      "-o",
       "obj/x64/Debug/gamejam/RenderSystem.o",
       "../../src/RenderSystem.h"
     ],

@@ -1,65 +1,65 @@
 #pragma once
 #include "Entities.h"
-#include <iostream>
+#include <vector>
 
 inline void ProcessImpact(Entity& e) {
     if (e.HasTag(TAG_FRAGILE) && !e.HasTag(TAG_BROKEN)) {
-        e.AddTag(TAG_BROKEN); e.color = DARKGRAY; e.zHeight = 5.0f;   
+        e.AddTag(TAG_BROKEN); e.color = DARKGRAY; e.boundsList[0].max.y = 5.0f;
     }
 }
 
 inline ChemResult CanProcessChemistry(int toolIdx, int targetIdx, const std::vector<Entity>& entities) {
-    const Entity& tool = entities[toolIdx];
-    const Entity& target = entities[targetIdx];
-
-    // Tool Empty Check!
-    if ((tool.HasTag(TAG_TAPE) || tool.HasTag(TAG_BUBBLE_WRAP)) && tool.stateValue <= 0) return CHEM_NONE;
-
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BROKEN)) return CHEM_USED_BUT_KEPT; 
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_SANDALS)) return CHEM_USED_BUT_KEPT; 
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) return CHEM_USED_BUT_KEPT; 
-    if (tool.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_MEDUSA)) return CHEM_ATTACHED;
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_WATER_SOURCE)) return CHEM_USED_BUT_KEPT;
-    if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WATER_SOURCE)) return CHEM_ATTACHED;
-    if (tool.HasTag(TAG_SPHINX_NOSE) && target.HasTag(TAG_SPHINX)) return CHEM_ATTACHED; 
-    if (tool.HasTag(TAG_SANDALS) && target.HasTag(TAG_MJOLNIR)) return CHEM_ATTACHED; 
-    if (tool.HasTag(TAG_BUBBLE_WRAP) && target.HasTag(TAG_BANSHEE_STONE)) return CHEM_ATTACHED; 
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BANSHEE_STONE)) {
-        for(const auto& e : entities) if(e.attachedTo == targetIdx && e.HasTag(TAG_BUBBLE_WRAP)) return CHEM_USED_BUT_KEPT;
-    }
-    
-    // NEW: Hole Covering
-    if (tool.HasTag(TAG_WET_SIGN) && target.HasTag(TAG_HOLE)) return CHEM_ATTACHED; // Drops sign on hole
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_HOLE)) return CHEM_USED_BUT_KEPT; // Tape web over hole
-
+    const Entity& tool = entities[toolIdx]; const Entity& target = entities[targetIdx];
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BROKEN)) return CHEM_USED_BUT_KEPT;
+    if (tool.HasTag(TAG_SPONGE) && target.HasTag(TAG_SPHINX_NOSE) && target.color.r == GOLD.r) return CHEM_USED_BUT_KEPT;
+    if (tool.HasTag(TAG_SPHINX_NOSE) && target.HasTag(TAG_SPHINX)) return CHEM_ATTACHED;
+    if (tool.HasTag(TAG_GLOVES) && target.HasTag(TAG_ELECTRIC)) return CHEM_ATTACHED;
+    if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WIND_BAG) && target.isGlitching) return CHEM_ATTACHED;
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_BROKEN)) return CHEM_USED_BUT_KEPT;
+    if (tool.HasTag(TAG_SANDALS) && target.HasTag(TAG_MJOLNIR)) return CHEM_ATTACHED;
     return CHEM_NONE;
 }
 
 inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entity>& entities) {
-    Entity& tool = entities[toolIdx];
-    Entity& target = entities[targetIdx];
-
-    if (tool.HasTag(TAG_TAPE)) tool.stateValue -= 1.0f; // Consume 1 Tape Use!
-    if (tool.HasTag(TAG_BUBBLE_WRAP)) tool.stateValue -= 1.0f; // Consume 1 Wrap Use!
-
+    Entity& tool = entities[toolIdx]; Entity& target = entities[targetIdx];
+    
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BROKEN)) {
+        tool.stateValue -= 1.0f;
         target.RemoveTag(TAG_BROKEN);
-        if (target.HasTag(TAG_EYEWEAR)) { target.color = BLACK; target.zHeight = 10.0f; } else { target.color = YELLOW; target.zHeight = 30.0f; }
-        return CHEM_USED_BUT_KEPT; 
+        if (target.HasTag(TAG_FRAGILE)) { target.color = ORANGE; target.boundsList[0].max.y = 30.0f; }
+        if (target.HasTag(TAG_MEDUSA)) { target.color = GREEN; target.boundsList[0].max.y = 30.0f; }
+        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        return CHEM_USED_BUT_KEPT;
     }
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_SANDALS)) { target.isGlitching = false; target.stateTimer = 0.0f; return CHEM_USED_BUT_KEPT; }
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) { target.isGlitching = false; target.color = WHITE; return CHEM_USED_BUT_KEPT; } 
-    if (tool.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_MEDUSA)) { tool.attachedTo = targetIdx; return CHEM_ATTACHED; }
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_WATER_SOURCE)) { target.isGlitching = false; target.stateTimer = 15.0f; return CHEM_USED_BUT_KEPT; }
-    if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WATER_SOURCE)) { target.isGlitching = false; target.stateTimer = 0.0f; tool.attachedTo = targetIdx; return CHEM_ATTACHED; }
-    if (tool.HasTag(TAG_SPHINX_NOSE) && target.HasTag(TAG_SPHINX)) { tool.attachedTo = targetIdx; return CHEM_ATTACHED; } 
-    if (tool.HasTag(TAG_SANDALS) && target.HasTag(TAG_MJOLNIR)) { tool.attachedTo = targetIdx; target.canGrab = true; target.isGlitching = false; target.zHeight += 40.0f; return CHEM_ATTACHED; }
-    if (tool.HasTag(TAG_BUBBLE_WRAP) && target.HasTag(TAG_BANSHEE_STONE)) { tool.attachedTo = targetIdx; return CHEM_ATTACHED; }
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BANSHEE_STONE)) { target.isGlitching = false; return CHEM_USED_BUT_KEPT; } 
-
-    // NEW: Hole Covering
-    if (tool.HasTag(TAG_WET_SIGN) && target.HasTag(TAG_HOLE)) { tool.attachedTo = targetIdx; return CHEM_ATTACHED; }
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_HOLE)) { target.stateValue = 1.0f; return CHEM_USED_BUT_KEPT; } // 1.0f means taped up!
-
+    
+    if (tool.HasTag(TAG_SPONGE) && target.HasTag(TAG_SPHINX_NOSE)) {
+        target.color = BEIGE; return CHEM_USED_BUT_KEPT;
+    }
+    
+    if (tool.HasTag(TAG_SPHINX_NOSE) && target.HasTag(TAG_SPHINX) && tool.color.r == BEIGE.r) {
+        tool.attachedTo = targetIdx; tool.color = GOLD; return CHEM_ATTACHED;
+    }
+    
+    if (tool.HasTag(TAG_GLOVES) && target.HasTag(TAG_ELECTRIC)) {
+        tool.attachedTo = targetIdx; target.canGrab = true; return CHEM_ATTACHED;
+    }
+    
+    if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WIND_BAG) && target.isGlitching) {
+        tool.attachedTo = targetIdx; target.isGlitching = false; return CHEM_ATTACHED;
+    }
+    
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_BROKEN)) {
+        tool.stateValue -= 1.0f; target.RemoveTag(TAG_BROKEN);
+        if (target.HasTag(TAG_EYEWEAR)) { target.color = BLACK; target.boundsList[0].max.y = 10.0f; } 
+        else { target.color = YELLOW; target.boundsList[0].max.y = 30.0f; }
+        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        return CHEM_USED_BUT_KEPT;
+    }
+    
+    if (tool.HasTag(TAG_SANDALS) && target.HasTag(TAG_MJOLNIR)) { 
+        tool.attachedTo = targetIdx; target.canGrab = true; target.isGlitching = false; 
+        target.boundsList[0].max.y += 40.0f; return CHEM_ATTACHED; 
+    }
+    
     return CHEM_NONE;
 }
