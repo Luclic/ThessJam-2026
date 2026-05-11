@@ -145,14 +145,12 @@ void ExportLevel(const std::vector<Entity>& entities) {
     out << "#pragma once\n#include \"Entities.h\"\n#include \"Hitboxes_Export.h\"\n\ninline void InitLevel(std::vector<Entity>& e) {\n    auto globalHitboxes = GetGlobalHitboxes();\n\n";
     for (const auto& ent : entities) {
         
-        // --- NEW: AUTO-TAGGING LOGIC ---
         std::string tagString = "{}";
         if (ent.name == "Door 1 (Greek 1)") tagString = "{TAG_DOOR_1}";
         else if (ent.name == "Door 2 (Greek 2)") tagString = "{TAG_DOOR_2}";
         else if (ent.name == "Door 3 (Egyptian)") tagString = "{TAG_DOOR_3}";
         else if (ent.name == "Door 4 (Nordic)") tagString = "{TAG_DOOR_4}";
         else if (ent.name == "Door 5 (Boss)") tagString = "{TAG_DOOR_5}";
-        // -------------------------------
 
         out << TextFormat("    e.push_back({ \"%s\", {%.1f, %.1f, %.1f}, {0,0,0}, {0,0,1}, {}, {}, ", ent.name.c_str(), ent.position.x, ent.position.y, ent.position.z);
         
@@ -182,7 +180,6 @@ int main(void) {
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
-        // NEW MISSING FILES (Will safely fail if they don't exist yet!)
         "Medusa", "Zeus", "Mummy", "Gleipnir", "Cork", "Mop", "Sphinx", "SphinxNose", "Sticker",
         "PandoraBox", "Handbook", "Brochure1", "Brochure2", "Brochure3", "Brochure4", "Brochure5"
     };
@@ -194,7 +191,6 @@ int main(void) {
     globalHitboxes = GetGlobalHitboxes();
     globalTweaks = GetGlobalTweaks();
     
-    // 1. Process entities from Level
     entities.erase(std::remove_if(entities.begin(), entities.end(), [](const Entity& e){ return e.name == "PhysicsWall"; }), entities.end());
     for (auto& e : entities) {
         std::string baseName = GetBaseModelName(e.name);
@@ -204,27 +200,22 @@ int main(void) {
         }
     }
     
-    // 2. Pre-register ALL unplaced models from the Spawn List so they appear in Hitbox Editor!
     for (const auto& sp : spawnList) {
         std::string baseName = GetBaseModelName(sp.modelName);
         if (globalHitboxes.find(baseName) == globalHitboxes.end()) {
-            
-            // --- NEW: CUSTOM PLACEHOLDER SHAPES ---
             if (baseName == "Handbook" || baseName.find("Brochure") != std::string::npos) {
-                globalHitboxes[baseName] = { {{-15, 0, -20}, {15, 5, 20}} }; // Thin Book Shape
+                globalHitboxes[baseName] = { {{-15, 0, -20}, {15, 5, 20}} }; 
             } 
             else if (baseName == "PandoraBox") {
-                globalHitboxes[baseName] = { {{-30, 0, -30}, {30, 40, 30}} }; // Big Chest Shape
+                globalHitboxes[baseName] = { {{-30, 0, -30}, {30, 40, 30}} }; 
             } 
             else {
-                globalHitboxes[baseName] = { {{-20, 0, -20}, {20, 40, 20}} }; // Default backup box
+                globalHitboxes[baseName] = { {{-20, 0, -20}, {20, 40, 20}} }; 
             }
-            
-            globalTweaks[baseName] = { 100.0f, {0,0,0}, 0.0f }; // Default backup scale
+            globalTweaks[baseName] = { 100.0f, {0,0,0}, 0.0f }; 
         }
     }
 
-    // 3. Build uniqueTypes array to power the Hitbox Editor selection
     for (const auto& pair : globalHitboxes) uniqueTypes.push_back(pair.first);
 
     SaveState(entities); 
@@ -237,6 +228,9 @@ int main(void) {
     float hitCamAngle = 45.0f; float hitCamDist = 300.0f; float hitCamHeight = 200.0f;
     int pendingSpawnIdx = -1; float pendingRot = 0.0f;
 
+    // --- FEATURE: Global Rotation Mode Toggle ---
+    static bool isRotationMode = false;
+
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
         Vector2 mousePos = GetMousePosition();
@@ -246,6 +240,12 @@ int main(void) {
 
         bool ctrlPressed = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
         bool shiftPressed = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+        // --- FEATURE: Toggle Rotation Mode ---
+        if (IsKeyPressed(KEY_LEFT_ALT)) {
+            isRotationMode = !isRotationMode;
+            if (isRotationMode) SaveState(entities); 
+        }
 
         if (IsKeyPressed(KEY_ONE)) {
             currentMode = (currentMode == MODE_LEVEL) ? MODE_HITBOX : MODE_LEVEL;
@@ -262,7 +262,11 @@ int main(void) {
             if (IsKeyDown(KEY_S)) { camera.position.z += camSpeed; camera.target.z += camSpeed; }
             if (IsKeyDown(KEY_A)) { camera.position.x -= camSpeed; camera.target.x -= camSpeed; }
             if (IsKeyDown(KEY_D)) { camera.position.x += camSpeed; camera.target.x += camSpeed; }
-            camera.position.y -= GetMouseWheelMove() * 300.0f;
+            
+            // --- FIX: Only zoom camera if mouse is inside the 3D space, preventing UI zoom bugs ---
+            if (mousePos.x > UI_WIDTH) {
+                camera.position.y -= GetMouseWheelMove() * 300.0f;
+            }
 
             if (ctrlPressed && IsKeyPressed(KEY_Z) && undoHistory.size() > 1) { undoHistory.pop_back(); entities = undoHistory.back().entities; selectedIndices.clear(); pendingSpawnIdx = -1; }
             if (ctrlPressed && IsKeyPressed(KEY_C) && !selectedIndices.empty()) { clipboard.clear(); for (int idx : selectedIndices) clipboard.push_back(entities[idx]); }
@@ -287,31 +291,60 @@ int main(void) {
             }
 
             if (mousePos.x > UI_WIDTH && pendingSpawnIdx == -1) { 
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    int clickedIdx = -1; float closestDist = 99999.0f;
-                    for (size_t i = 0; i < entities.size(); ++i) {
-                        std::vector<BoundingBox> projectedBounds = entities[i].GetWorldBounds();
-                        bool hit = false; float hitDist = 99999.0f;
-                        for(const auto& b : projectedBounds) { RayCollision col = GetRayCollisionBox(ray, b); if (col.hit && col.distance < hitDist) { hitDist = col.distance; hit = true; } }
-                        if (hit && hitDist < closestDist) { closestDist = hitDist; clickedIdx = i; }
+                
+                // --- FEATURE: Advanced Rotation Mode Handling ---
+                if (isRotationMode) {
+                    if (!selectedIndices.empty()) {
+                        float rotDelta = GetMouseDelta().x * 0.5f;
+                        if (rotDelta != 0.0f) {
+                            for (int idx : selectedIndices) {
+                                entities[idx].stateValue += rotDelta;
+                                if (entities[idx].stateValue >= 360.0f) entities[idx].stateValue -= 360.0f;
+                                if (entities[idx].stateValue < 0.0f) entities[idx].stateValue += 360.0f;
+                            }
+                        }
                     }
-                    if (clickedIdx != -1) {
-                        bool alreadySelected = std::find(selectedIndices.begin(), selectedIndices.end(), clickedIdx) != selectedIndices.end();
-                        if (shiftPressed) { if (!alreadySelected) selectedIndices.push_back(clickedIdx); } 
-                        else if (!alreadySelected) { selectedIndices.clear(); selectedIndices.push_back(clickedIdx); }
-                        isDragging = true; justSavedState = false; dragOffsets.clear();
-                        for (int idx : selectedIndices) dragOffsets.push_back(Vector3Subtract(entities[idx].position, groundHit));
-                    } else if (!shiftPressed) selectedIndices.clear();
-                }
+                } 
+                else { // NORMAL SELECTION & DRAGGING MODE
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        int clickedIdx = -1; float closestDist = 99999.0f;
+                        for (size_t i = 0; i < entities.size(); ++i) {
+                            std::vector<BoundingBox> projectedBounds = entities[i].GetWorldBounds();
+                            bool hit = false; float hitDist = 99999.0f;
+                            for(const auto& b : projectedBounds) { RayCollision col = GetRayCollisionBox(ray, b); if (col.hit && col.distance < hitDist) { hitDist = col.distance; hit = true; } }
+                            if (hit && hitDist < closestDist) { closestDist = hitDist; clickedIdx = i; }
+                        }
+                        if (clickedIdx != -1) {
+                            bool alreadySelected = std::find(selectedIndices.begin(), selectedIndices.end(), clickedIdx) != selectedIndices.end();
+                            if (shiftPressed) { if (!alreadySelected) selectedIndices.push_back(clickedIdx); } 
+                            else if (!alreadySelected) { selectedIndices.clear(); selectedIndices.push_back(clickedIdx); }
+                            isDragging = true; justSavedState = false; dragOffsets.clear();
+                            for (int idx : selectedIndices) dragOffsets.push_back(Vector3Subtract(entities[idx].position, groundHit));
+                        } else if (!shiftPressed) selectedIndices.clear();
+                    }
 
-                if (isDragging && !selectedIndices.empty()) {
-                    if (!justSavedState) { SaveState(entities); justSavedState = true; } 
-                    for (size_t i = 0; i < selectedIndices.size(); ++i) {
-                        Vector3 newPos = Vector3Add(groundHit, dragOffsets[i]);
-                        entities[selectedIndices[i]].position.x = Snap(newPos.x, SNAP_GRID); entities[selectedIndices[i]].position.z = Snap(newPos.z, SNAP_GRID);
+                    if (isDragging && !selectedIndices.empty()) {
+                        if (!justSavedState) { SaveState(entities); justSavedState = true; } 
+                        
+                        // --- FEATURE: Height Placement Logic ---
+                        if (ctrlPressed) {
+                            float heightDelta = -GetMouseDelta().y * 1.0f; 
+                            for (size_t i = 0; i < selectedIndices.size(); ++i) {
+                                entities[selectedIndices[i]].position.y += heightDelta;
+                                // Lock in the new height offset for when you release Ctrl
+                                dragOffsets[i].y = entities[selectedIndices[i]].position.y;
+                            }
+                        } else {
+                            for (size_t i = 0; i < selectedIndices.size(); ++i) {
+                                Vector3 newPos = Vector3Add(groundHit, dragOffsets[i]);
+                                entities[selectedIndices[i]].position.x = Snap(newPos.x, SNAP_GRID); 
+                                entities[selectedIndices[i]].position.z = Snap(newPos.z, SNAP_GRID);
+                                // The Y value naturally maintains whatever it was set to by the dragOffsets
+                            }
+                        }
                     }
+                    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) isDragging = false;
                 }
-                if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) isDragging = false;
 
                 if (!selectedIndices.empty() && IsKeyPressed(KEY_R)) { SaveState(entities); for (int idx : selectedIndices) { entities[idx].stateValue += 90.0f; if (entities[idx].stateValue >= 360.0f) entities[idx].stateValue -= 360.0f; } }
                 if (!selectedIndices.empty() && (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE))) {
@@ -325,8 +358,8 @@ int main(void) {
                 if (IsKeyPressed(KEY_R)) { pendingRot += 90.0f; if(pendingRot >= 360.0f) pendingRot -= 360.0f; }
                 if (mousePos.x > UI_WIDTH && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     SaveState(entities); 
-                    std::string dName = spawnList[pendingSpawnIdx].name;      // The Unique Name ("Door 1...")
-                    std::string mName = spawnList[pendingSpawnIdx].modelName; // The Model ("wall3")
+                    std::string dName = spawnList[pendingSpawnIdx].name;      
+                    std::string mName = spawnList[pendingSpawnIdx].modelName; 
                     std::string bName = GetBaseModelName(mName);
 
                     Entity newEnt = { dName, {Snap(groundHit.x, SNAP_GRID), 0, Snap(groundHit.z, SNAP_GRID)}, {0,0,0}, {0,0,1},
@@ -356,7 +389,6 @@ int main(void) {
                 auto modIt = models.find(mName);
                 std::string baseName = GetBaseModelName(mName);
                 
-                // NEW: Added meshCount > 0 safety check!
                 if (modIt != models.end() && modIt->second.meshCount > 0) {
                     ModelTweak& tweak = globalTweaks[baseName];
                     float rad = e.stateValue * DEG2RAD; float cosR = cos(rad); float sinR = sin(rad);
@@ -388,7 +420,6 @@ int main(void) {
                 Vector3 snapHit = { Snap(groundHit.x, SNAP_GRID), 0.0f, Snap(groundHit.z, SNAP_GRID) };
                 auto modIt = models.find(spawnList[pendingSpawnIdx].modelName);
                 std::string baseName = GetBaseModelName(spawnList[pendingSpawnIdx].modelName);
-                // NEW: Added meshCount > 0 safety check here too!
                 if (modIt != models.end() && modIt->second.meshCount > 0) DrawModelEx(modIt->second, snapHit, {0, 1, 0}, pendingRot, {globalTweaks[baseName].scale, globalTweaks[baseName].scale, globalTweaks[baseName].scale}, Fade(WHITE, 0.6f));
                 else { DrawCube(snapHit, 40, 40, 40, Fade(spawnList[pendingSpawnIdx].color, 0.6f)); }
             }
@@ -400,11 +431,17 @@ int main(void) {
             DrawText("Ctrl+C/V: Copy/Paste | Ctrl+Z: Undo", 20, 145, 15, LIGHTGRAY);
             DrawText("5: EXPORT MAP", 20, 175, 30, GREEN);
 
+            // --- FEATURE: Inform the user when advanced rotation mode is enabled ---
+            if (isRotationMode) {
+                DrawText("ROTATION MODE ACTIVE", UI_WIDTH + 20, 20, 20, GREEN);
+                DrawText("Move mouse left/right to spin. Press Left Alt to exit.", UI_WIDTH + 20, 45, 15, WHITE);
+            }
+
             BeginScissorMode(0, 220, UI_WIDTH, GetScreenHeight() - 220);
             float btnY = 230.0f + spawnScrollY;
             for (size_t i = 0; i < spawnList.size(); ++i) {
                 Rectangle btn = { 20, btnY, (float)UI_WIDTH - 40, 100 }; 
-                if (btnY > -100 && btnY < GetScreenHeight()) { // Draw if partially visible
+                if (btnY > -100 && btnY < GetScreenHeight()) { 
                     Color btnColor = {40, 40, 50, 255};
                     if (pendingSpawnIdx == i) btnColor = {80, 80, 90, 255}; 
                     else if (CheckCollisionPointRec(mousePos, btn)) {
@@ -420,12 +457,11 @@ int main(void) {
                     if (modIt != models.end() && modIt->second.meshCount > 0) {
                         DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
                     } else { 
-                        // --- NEW: UI PLACEHOLDER SIZES ---
-                        Vector3 phSize = {60, 60, 60}; // Default Cube
+                        Vector3 phSize = {60, 60, 60}; 
                         if (spawnList[i].modelName == "Handbook" || spawnList[i].modelName.find("Brochure") != std::string::npos) {
-                            phSize = {40, 10, 50}; // Flat Book UI
+                            phSize = {40, 10, 50}; 
                         } else if (spawnList[i].modelName == "PandoraBox") {
-                            phSize = {70, 50, 70}; // Wide Box UI
+                            phSize = {70, 50, 70}; 
                         }
                         DrawCube({0,50,0}, phSize.x, phSize.y, phSize.z, spawnList[i].color); 
                         DrawCubeWires({0,50,0}, phSize.x, phSize.y, phSize.z, BLACK); 
@@ -442,6 +478,11 @@ int main(void) {
             std::string activeType = uniqueTypes[currentPropIdx];
             std::vector<BoundingBox>& boxes = globalHitboxes[activeType];
             ModelTweak& tweak = globalTweaks[activeType];
+
+            // --- FIX: Segfault Guard. Prevents crashing if a box array is entirely empty! ---
+            if (boxes.empty()) {
+                boxes.push_back({{-20, 0, -20}, {20, 40, 20}});
+            }
 
             if (currentBoxIdx >= boxes.size()) currentBoxIdx = 0;
 
