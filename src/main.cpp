@@ -48,12 +48,18 @@ bool doorsOpen[5] = {false, false, false, false, false};
 void ResetNight() {
     entities.clear();
     InitLevel(entities);
+    
+    // INJECT ALL TAGS AND LOGIC HERE!
+    AssignEntityRules(entities); 
+
     grabbedEntityIndex = -1;
-    equippedEyewear = -1;
-    equippedGloves = -1;
+    equippedEyewear = -1; 
+    equippedGloves = -1; 
     shiftTimer = 0.0f;
     showInteractMenu = false;
+    
     if (currentNight > 1) LoadGame(currentNight, entities); 
+    SetupNightHazards(currentNight, entities);
 }
 
 int main(void) {
@@ -154,20 +160,20 @@ int main(void) {
             if (IsKeyPressed(KEY_L)) { for (auto& e : entities) if (e.HasTag(TAG_BOULDER)) e.isGlitching = !e.isGlitching; }
             if (IsKeyPressed(KEY_SIX)) { shiftTimer = 8 * SECONDS_PER_HOUR; }
 
-            if (IsKeyPressed(KEY_ONE)) doorsOpen[0] = !doorsOpen[0]; if (IsKeyPressed(KEY_TWO)) doorsOpen[1] = !doorsOpen[1];
-            if (IsKeyPressed(KEY_THREE)) doorsOpen[2] = !doorsOpen[2]; if (IsKeyPressed(KEY_FOUR)) doorsOpen[3] = !doorsOpen[3];
+            // TO BE JUST THIS (So your debug keys work!):
+            if (IsKeyPressed(KEY_ONE)) doorsOpen[0] = !doorsOpen[0]; 
+            if (IsKeyPressed(KEY_TWO)) doorsOpen[1] = !doorsOpen[1];
+            if (IsKeyPressed(KEY_THREE)) doorsOpen[2] = !doorsOpen[2]; 
+            if (IsKeyPressed(KEY_FOUR)) doorsOpen[3] = !doorsOpen[3];
             if (IsKeyPressed(KEY_FIVE)) doorsOpen[4] = !doorsOpen[4];
 
-            if (currentNight >= 1) doorsOpen[0] = doorsOpen[1] = true; 
-            if (currentNight >= 2) doorsOpen[3] = true;                
-            if (currentNight >= 3) doorsOpen[4] = true;                
-            
+            // 4. Update the actual Entity properties so the physics engine respects the doors
             for(auto& e : entities) {
                 if (e.HasTag(TAG_DOOR_1)) { e.isSolid = !doorsOpen[0]; e.color.a = doorsOpen[0] ? 30 : 255; }
                 if (e.HasTag(TAG_DOOR_2)) { e.isSolid = !doorsOpen[1]; e.color.a = doorsOpen[1] ? 30 : 255; }
                 if (e.HasTag(TAG_DOOR_3)) { e.isSolid = !doorsOpen[2]; e.color.a = doorsOpen[2] ? 30 : 255; }
-                if (e.HasTag(TAG_DOOR_4)) { e.isSolid = !doorsOpen[3]; e.color.a = doorsOpen[3] ? 30 : 255; }
-                if (e.HasTag(TAG_DOOR_5)) { e.isSolid = !doorsOpen[4]; e.color.a = doorsOpen[4] ? 30 : 255; }
+                if (e.HasTag(TAG_DOOR_5)) { e.isSolid = !doorsOpen[3]; e.color.a = doorsOpen[3] ? 30 : 255; }
+                if (e.HasTag(TAG_DOOR_4)) { e.isSolid = !doorsOpen[4]; e.color.a = doorsOpen[4] ? 30 : 255; }
             }
 
             if (showInteractMenu) {
@@ -229,12 +235,23 @@ int main(void) {
 
                 if (grabbedEntityIndex != -1) entities[grabbedEntityIndex].isUsing = IsKeyDown(KEY_F);
 
+                // ---------------------------------------------------------
+                // 1. USE LOGIC (KEY_F)
+                // ---------------------------------------------------------
                 if (IsKeyPressed(KEY_F)) {
                     bool environmentF = false;
                     
                     std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
                     for (auto& b : pIntBoxList) {
-                        b.min.x -= 40; b.max.x += 40; b.min.z -= 40; b.max.z += 40; b.max.y += 40;
+                        // Push the box forward in the direction we are facing
+                        float reach = 60.0f;
+                        b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach;
+                        b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach;
+                        
+                        // Expand into a 3D box (Crucial: Expanded Y-axis to reach pedestals/switches)
+                        b.min.x -= 50; b.max.x += 50; 
+                        b.min.z -= 50; b.max.z += 50; 
+                        b.min.y -= 20; b.max.y += 120; 
                     }
                     
                     for (auto& e : entities) {
@@ -280,11 +297,18 @@ int main(void) {
                     }
                 }
                 
+                // ---------------------------------------------------------
+                // 2. GRAB/DROP LOGIC (KEY_E)
+                // ---------------------------------------------------------
+                // ---------------------------------------------------------
+                // 2. GRAB/DROP LOGIC (KEY_E)
+                // ---------------------------------------------------------
                 if (IsKeyPressed(KEY_E)) {
                     interactTargets.clear();
                     if (grabbedEntityIndex != -1) {
                         Entity& item = entities[grabbedEntityIndex];
-                        Vector3 dropPos = { player.position.x + player.facingDir.x * 60.0f, player.position.y, player.position.z + player.facingDir.z * 60.0f };
+                        // Drop slightly forward and HIGHER UP so it can land on pedestals
+                        Vector3 dropPos = { player.position.x + player.facingDir.x * 70.0f, player.position.y + 100.0f, player.position.z + player.facingDir.z * 70.0f };
                         
                         std::vector<BoundingBox> dropBoxList = item.boundsList; 
                         for (auto& b : dropBoxList) {
@@ -293,6 +317,8 @@ int main(void) {
                             b.min.z += dropPos.z; b.max.z += dropPos.z;
                         }
 
+                        // ... (Keep your drop interaction checks here, they are fine) ...
+                        
                         for(size_t i = 0; i < entities.size(); ++i) {
                             if(i != grabbedEntityIndex && CheckCollisionLists(dropBoxList, entities[i].GetWorldInteractBounds())) {
                                 if (entities[i].name == "stand2" || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) {
@@ -306,6 +332,7 @@ int main(void) {
                         if (interactTargets.empty()) {
                             float targetY = 0.0f;
                             for(size_t i = 0; i < entities.size(); ++i) {
+                                // Only collide with solids for drop height
                                 if(i != grabbedEntityIndex && entities[i].isSolid && CheckCollisionLists(dropBoxList, entities[i].GetWorldBounds())) {
                                     for (const auto& b : entities[i].GetWorldBounds()) {
                                         if (b.max.y > targetY) targetY = b.max.y;
@@ -322,15 +349,28 @@ int main(void) {
                         }
 
                     } else {
+                        // WE ARE EMPTY HANDED - TRY TO GRAB SOMETHING
                         std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
                         for (auto& b : pIntBoxList) {
-                            b.min.x -= 40; b.max.x += 40; b.min.z -= 40; b.max.z += 40; 
+                            // Push 3D hit volume forward
+                            float reach = 60.0f;
+                            b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach;
+                            b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach;
+                            
+                            // Expand to reach floor and pedestals!
+                            b.min.x -= 50; b.max.x += 50; 
+                            b.min.z -= 50; b.max.z += 50; 
+                            b.min.y -= 20; b.max.y += 120; // FIX: Y-AXIS EXPANSION
                         }
 
                         for (size_t i = 1; i < entities.size(); ++i) {
                             if (i == equippedEyewear || i == equippedGloves) continue; 
-                            if (!entities[i].isGrabbed && entities[i].canGrab && CheckCollisionLists(pIntBoxList, entities[i].GetWorldInteractBounds())) interactTargets.push_back(i);
+                            if (!entities[i].isGrabbed && entities[i].canGrab && CheckCollisionLists(pIntBoxList, entities[i].GetWorldInteractBounds())) {
+                                interactTargets.push_back(i);
+                            }
                         }
+                        
+                        // Sort by proximity so we grab what is closest to the player's center
                         std::sort(interactTargets.begin(), interactTargets.end(), [&](int a, int b) { return Vector3Distance(player.position, entities[a].position) < Vector3Distance(player.position, entities[b].position); });
 
                         if (interactTargets.size() == 1) { executeAction = true; actionTargetIdx = interactTargets[0]; isDropMenu = false; } 
@@ -339,10 +379,18 @@ int main(void) {
                 }
 
                 if (IsKeyPressed(KEY_SPACE) && grabbedEntityIndex != -1 && entities[grabbedEntityIndex].canThrow) {
-                    entities[grabbedEntityIndex].isGrabbed = false; entities[grabbedEntityIndex].isUsing = false; 
-                    entities[grabbedEntityIndex].velocity = Vector3Scale(player.facingDir, 1200.0f); 
-                    entities[grabbedEntityIndex].velocity.y = 450.0f; 
-                    if (entities[grabbedEntityIndex].HasTag(TAG_SANDALS)) entities[grabbedEntityIndex].isGlitching = true;
+                    Entity& held = entities[grabbedEntityIndex];
+                    held.isGrabbed = false; 
+                    held.isUsing = false; 
+                    
+                    // BUFFED THROW: Increased horizontal speed and vertical arc
+                    float throwStrength = 2200.0f; 
+                    float upwardArc = 800.0f;     
+                    
+                    held.velocity = Vector3Scale(player.facingDir, throwStrength); 
+                    held.velocity.y = upwardArc; 
+                    
+                    if (held.HasTag(TAG_SANDALS)) held.isGlitching = true;
                     grabbedEntityIndex = -1;
                 }
             }

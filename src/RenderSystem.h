@@ -36,6 +36,8 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     cam3D.fovy = 45.0f; 
     cam3D.projection = CAMERA_PERSPECTIVE;
 
+    std::vector<std::pair<Vector2, std::string>> floatingTexts;
+
     BeginMode3D(cam3D);
     Vector2 camCenter = { camera.target.x + GAME_WIDTH/2.0f, camera.target.y + GAME_HEIGHT/2.0f };
     
@@ -56,29 +58,32 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
             Vector3 pos3D = Vector3Add(e->position, rotatedOffset);
             float finalRot = tweak.rot + e->stateValue; 
             
-            // Explicitly cast to Vector3 to satisfy the compiler
+            // ✅ REPLACE WITH:
             Vector3 finalScale = (Vector3){tweak.scale, tweak.scale, tweak.scale};
-            if (e->HasTag(TAG_DOOR_1) || e->HasTag(TAG_DOOR_2) || e->HasTag(TAG_DOOR_3) || e->HasTag(TAG_DOOR_4) || e->HasTag(TAG_DOOR_5)) {
-                finalScale = (Vector3){ tweak.scale * 0.5f, tweak.scale * 0.5f, tweak.scale * 0.5f };
-            }
             DrawModelEx(modIt->second, pos3D, {0, 1, 0}, finalRot, finalScale, WHITE);
         } else {
+            // PLACEHOLDER SYSTEM
             Color drawCol = e->color;
-            if (e->HasTag(TAG_FUSEBOX)) drawCol = (e->stateValue > 0.5f) ? GREEN : RED; 
-            if (e->HasTag(TAG_WATER_SOURCE) && e->isStone) drawCol = SKYBLUE; 
-            if (e->HasTag(TAG_HOLE) && e->stateValue > 0.5f) drawCol = LIGHTGRAY; 
-
             std::vector<BoundingBox> projected = e->GetWorldBounds();
+            
             for(const auto& b : projected) {
                 Vector3 size = { b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z };
-                if (size.x > 0 && size.y > 0 && size.z > 0 && e->name != "PhysicsWall" && e->name != "wall1") {
+                if (size.x > 0 && size.y > 0 && size.z > 0) {
                     Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
-                    DrawCubeV(center, size, drawCol); DrawCubeWiresV(center, size, BLACK);
-                }
+                    DrawCubeV(center, size, Fade(drawCol, 0.8f));
+                    DrawCubeWiresV(center, size, BLACK);
+                    
+                    // NEW: Capture the 2D screen coordinate for the text!
+                    // NEW: Only draw text if the object is IN FRONT of the camera!
+                    Vector3 toObj = Vector3Subtract(center, cam3D.position);
+                    Vector3 camForward = Vector3Subtract(cam3D.target, cam3D.position);
+                    if (Vector3DotProduct(toObj, camForward) > 0.0f) {
+                        floatingTexts.push_back({ GetWorldToScreen({center.x, b.max.y + 20.0f, center.z}, cam3D), e->name });
+                    }                }
             }
         }
 
-        if (e->castsShadow && !e->isGrabbed && e->attachedTo == -1) DrawCylinder({e->position.x, 2.0f, e->position.z}, 25.0f, 25.0f, 0.1f, 12, {0, 0, 0, 80});
+        //if (e->castsShadow && !e->isGrabbed && e->attachedTo == -1) DrawCylinder({e->position.x, 2.0f, e->position.z}, 25.0f, 25.0f, 0.1f, 12, {0, 0, 0, 80});
         if (e->HasTag(TAG_WATER_SOURCE) && e->stateValue > 0.0f) DrawCylinder({e->position.x, 1.0f, e->position.z}, e->stateValue, e->stateValue, 0.1f, 16, {0, 121, 241, 150});
         if (e->HasTag(TAG_BANSHEE_STONE) && e->stateValue > 0.0f) DrawCylinderWires({e->position.x, e->position.y, e->position.z}, e->stateValue, e->stateValue, 1.0f, 16, {200, 100, 255, (unsigned char)(std::max(0.0f, 255.0f - (e->stateValue / 800.0f) * 255.0f))});
         
@@ -93,7 +98,10 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     if (hazVis.drawingBeam) { DrawTriangle3D(hazVis.beamP1, hazVis.beamP2, hazVis.beamP3, { 0, 255, 0, 80 }); DrawTriangle3D(hazVis.beamP1, hazVis.beamP3, hazVis.beamP2, { 0, 255, 0, 80 }); }
     if (hazVis.drawingExtinguisher) { DrawTriangle3D(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); DrawTriangle3D(hazVis.extP1, hazVis.extP3, hazVis.extP2, { 255, 255, 255, 150 }); }
     EndMode3D();
-
+    // NEW: Draw all the saved floating text over the 3D scene
+    for(const auto& ft : floatingTexts) {
+        DrawText(ft.second.c_str(), ft.first.x - MeasureText(ft.second.c_str(), 20)/2, ft.first.y, 20, RAYWHITE);
+    }
     BeginMode2D(camera);
     for (const auto& e : entities) {
         if (e.HasTag(TAG_LIGHTSWITCH) && e.stateValue < 0.5f) {

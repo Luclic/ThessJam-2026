@@ -18,9 +18,16 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
     for (size_t i = 0; i < entities.size(); ++i) {
         Entity& e = entities[i];
         
+        // --- QUALITY OF LIFE: DISABLE COLLISION FOR HELD/WORN ITEMS ---
+        if ((int)i == grabbedEntityIndex || (int)i == equippedEyewear || (int)i == equippedGloves || e.attachedTo != -1) {
+            e.isSolid = false; 
+        }
+        
         if ((int)i == grabbedEntityIndex) {
-            e.position = player.position; 
-            e.position.y = player.position.y + 50.0f; 
+            // Push the item 60 units forward so it sits in front of the player
+            e.position.x = player.position.x + player.facingDir.x * 60.0f;
+            e.position.y = player.position.y + 70.0f; // Lift it to chest height
+            e.position.z = player.position.z + player.facingDir.z * 60.0f; 
             e.velocity = {0,0,0}; continue;
         }
         
@@ -36,9 +43,19 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             if (parent.HasTag(TAG_FUSEBOX)) { e.position.z += 20.0f; e.position.y -= 20.0f; } 
             e.velocity = {0,0,0}; continue; 
         }
-        if ((int)i == equippedEyewear || (int)i == equippedGloves) {
-            e.position = player.position; 
-            e.position.y = player.position.y + ((int)i == equippedEyewear ? 60.0f : 40.0f); 
+        if ((int)i == equippedEyewear) {
+            // Move glasses to head height and slightly forward
+            e.position.x = player.position.x + player.facingDir.x * 15.0f;
+            e.position.y = player.position.y + 135.0f; // Head height
+            e.position.z = player.position.z + player.facingDir.z * 15.0f;
+            e.velocity = {0,0,0}; continue;
+        }
+
+        if ((int)i == equippedGloves) {
+            // Move gloves to waist/hand height
+            e.position.x = player.position.x + player.facingDir.x * 25.0f;
+            e.position.y = player.position.y + 80.0f; 
+            e.position.z = player.position.z + player.facingDir.z * 25.0f;
             e.velocity = {0,0,0}; continue;
         }
 
@@ -58,7 +75,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         }
 
         if (e.HasTag(TAG_SANDALS) && e.isGlitching && !e.isStone && !e.isGrabbed) {
-            e.position.y = 150.0f; 
+            e.position.y = 70.0f; 
             if (GetRandomValue(0, 100) < 10) { e.velocity.x = (GetRandomValue(-100, 100) / 100.0f) * 1000.0f; e.velocity.z = (GetRandomValue(-100, 100) / 100.0f) * 1000.0f; }
         }
         if (e.HasTag(TAG_SANDALS) && !e.isGlitching && !e.isGrabbed && !e.isStone && e.position.y < 20.0f) {
@@ -73,10 +90,20 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             std::vector<BoundingBox> myBoxY = e.GetWorldBounds();
             bool hitGround = false;
             
-            if (e.position.y <= 0.1f) { 
+            // NEW: Are we currently inside a hole?
+            bool inHole = false;
+            for (const auto& hole : entities) {
+                if (hole.HasTag(TAG_HOLE) && CheckCollisionLists(myBoxY, hole.GetWorldBounds())) {
+                    inHole = true; break;
+                }
+            }
+            
+            // If we are at the floor (0.0f) AND not in a hole, stop falling.
+            if (e.position.y <= 0.1f && !inHole) { 
                 e.position.y = 0.0f;
                 hitGround = true;
-            } else {
+            } else if (!inHole) {
+                // ... (Keep your existing solid-object collision loop here)
                 for (const auto& other : entities) {
                     if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1) {
                         if (CheckCollisionLists(myBoxY, other.GetWorldBounds())) {
@@ -92,6 +119,11 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                         }
                     }
                 }
+            }
+            
+            // NEW: Clean up items that fall into the abyss so they don't lag the game
+            if (e.position.y < -300.0f) {
+                e.velocity = {0,0,0}; e.isGlitching = false;
             }
 
             if (hitGround) {
@@ -115,8 +147,15 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 if (e.HasTag(TAG_BOULDER) && other.name == "Player") continue; 
                 if (e.name == "Player" && other.HasTag(TAG_BOULDER)) continue; 
 
-                if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1 && CheckCollisionLists(nextX, other.GetWorldBounds())) {
-                    e.position.x -= e.velocity.x * dt; e.velocity.x *= -0.5f; break;
+                if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1) {
+                    // SEAM FIX: Only collide horizontally if obstacle is taller than our step offset
+                    bool isObstacleTallEnough = false;
+                    for (const auto& ob : other.GetWorldBounds()) {
+                        if (ob.max.y > e.position.y + 5.0f) isObstacleTallEnough = true;
+                    }
+                    if (isObstacleTallEnough && CheckCollisionLists(nextX, other.GetWorldBounds())) {
+                        e.position.x -= e.velocity.x * dt; e.velocity.x *= -0.5f; break;
+                    }
                 }
             }
         }
@@ -127,8 +166,15 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             for (auto& other : entities) {
                 if (e.HasTag(TAG_BOULDER) && other.name == "stand2") continue; 
 
-                if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1 && CheckCollisionLists(nextZ, other.GetWorldBounds())) {
-                    e.position.z -= e.velocity.z * dt; e.velocity.z *= -0.5f; break;
+                if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1) {
+                    // SEAM FIX: Step Offset
+                    bool isObstacleTallEnough = false;
+                    for (const auto& ob : other.GetWorldBounds()) {
+                        if (ob.max.y > e.position.y + 5.0f) isObstacleTallEnough = true;
+                    }
+                    if (isObstacleTallEnough && CheckCollisionLists(nextZ, other.GetWorldBounds())) {
+                        e.position.z -= e.velocity.z * dt; e.velocity.z *= -0.5f; break;
+                    }
                 }
             }
         }
@@ -164,12 +210,17 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 }
             }
 
+            // NEW: Proper physical separation for the Boulder
             if (CheckCollisionLists(e.GetWorldBounds(), player.GetWorldBounds())) {
                 if (player.position.x > e.position.x) { 
-                    if (player.velocity.x < -10.0f) { e.velocity.x = player.velocity.x; } 
-                    else { player.velocity.x = e.velocity.x; player.position.x += e.velocity.x * dt; }
+                    // Player is on the right, push them right!
+                    player.position.x = e.position.x + 80.0f; 
+                    if (player.velocity.x < -10.0f) e.velocity.x = -200.0f; // Player is pushing against it
+                    else player.velocity.x = e.velocity.x; // Player is being steamrolled
                 } else {
-                    if (player.velocity.x > 10.0f) e.velocity.x = player.velocity.x;
+                    // Player is on the left, push them left!
+                    player.position.x = e.position.x - 80.0f;
+                    if (player.velocity.x > 10.0f) e.velocity.x = 200.0f; // Player is pushing it
                 }
             }
 
@@ -201,28 +252,30 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             Vector3 targetPos = e.position;
             bool targetFound = false;
 
-            int myRoomX = (int)std::floor(e.position.x / GAME_WIDTH);
-            int myRoomZ = (int)std::floor(e.position.z / GAME_HEIGHT);
+            // Target the nearest Fusebox
+            Entity* targetFusebox = nullptr;
+            float closestDist = 9999.0f;
 
-            bool lightOn = true;
-            Entity* mySwitch = nullptr;
             for (auto& other : entities) {
-                if (other.HasTag(TAG_LIGHTSWITCH) && (int)std::floor(other.position.x / GAME_WIDTH) == myRoomX && (int)std::floor(other.position.z / GAME_HEIGHT) == myRoomZ) {
-                    mySwitch = &other; lightOn = (other.stateValue > 0.5f); break;
+                if (other.HasTag(TAG_FUSEBOX)) {
+                    float d = Vector3Distance(e.position, other.position);
+                    if (d < closestDist) {
+                        closestDist = d;
+                        targetFusebox = &other;
+                        targetFound = true;
+                    }
                 }
             }
 
-            if (lightOn && mySwitch) {
-                targetPos = mySwitch->position; targetFound = true;
-            } else {
-                for (auto& other : entities) if (other.HasTag(TAG_SARCOPHAGUS)) { targetPos = other.position; targetFound = true; break; }
-            }
+            if (targetFound && targetFusebox) {
+                Vector3 dir = Vector3Normalize(Vector3Subtract(targetFusebox->position, e.position));
+                e.velocity.x += dir.x * 250.0f * dt; // Slightly faster mummy
+                e.velocity.z += dir.z * 250.0f * dt;
 
-            if (targetFound) {
-                Vector3 dir = Vector3Normalize(Vector3Subtract(targetPos, e.position));
-                e.velocity.x += dir.x * 200.0f * dt; 
-                e.velocity.z += dir.z * 200.0f * dt;
-                if (lightOn && Vector3Distance(e.position, targetPos) < 100.0f) mySwitch->stateValue = 0.0f; 
+                // If close to fusebox, SABOTAGE IT (Turn it off)
+                if (Vector3Distance(e.position, targetFusebox->position) < 80.0f) {
+                    targetFusebox->stateValue = 0.0f; // OFF
+                }
             }
 
             for (auto& other : entities) {
@@ -368,4 +421,53 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
     }
 
     return visuals;
+}
+
+inline void SetupNightHazards(int currentNight, std::vector<Entity>& entities) {
+    // 1. Reset everything to a safe state first
+    for (auto& e : entities) {
+        e.isGlitching = false;
+        if (e.HasTag(TAG_LIGHTSWITCH)) e.stateValue = 1.0f; // Lights ON
+    }
+
+    // 2. Night 1: Orientation (Water & Boulder)
+    if (currentNight >= 1) {
+        for (auto& e : entities) {
+            if (e.HasTag(TAG_WATER_SOURCE) || e.HasTag(TAG_BOULDER)) e.isGlitching = true;
+        }
+    }
+
+    // 3. Night 2: Cross-Breeze (Wind & Sparks)
+    if (currentNight >= 2) {
+        for (auto& e : entities) {
+            if (e.HasTag(TAG_WIND_BAG) || e.HasTag(TAG_ZEUS)) e.isGlitching = true;
+        }
+    }
+
+    // 4. Night 3: Graveyard Shift (Heat & Mummy)
+    if (currentNight >= 3) {
+        for (auto& e : entities) {
+            if (e.HasTag(TAG_SUN_DISK) || e.HasTag(TAG_MUMMY)) e.isGlitching = true;
+        }
+    }
+
+    // 5. Night 4: Heavy Lifting (Nordic Room)
+    if (currentNight >= 4) {
+        for (auto& e : entities) {
+            if (e.HasTag(TAG_MJOLNIR) || e.HasTag(TAG_GLEIPNIR)) {
+                e.isGlitching = true;
+                if (e.HasTag(TAG_MJOLNIR)) e.canGrab = false; // Make sure Thor's hammer is stuck!
+            }
+        }
+    }
+
+    // 6. Night 6: The Blackout
+    if (currentNight == 6) {
+        for (auto& e : entities) {
+            if (e.HasTag(TAG_LIGHTSWITCH)) e.stateValue = 0.0f; // Force lights off at start
+        }
+    }
+
+    // 7. Night 7: Boss Room (Pandora)
+    // Note: Add your TAG_PANDORA to Entities.h when you are ready to code the spawner!
 }

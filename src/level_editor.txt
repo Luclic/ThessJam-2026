@@ -41,8 +41,13 @@ void SaveState(const std::vector<Entity>& currentEnts) {
 
 struct SpawnableProp { std::string name; std::string modelName; Color color; };
 std::vector<SpawnableProp> spawnList = {
-    // Architectural
+    // Architectural & Doors
     {"Wall (Press C)", "wall1", GRAY}, {"Wall Corner (Press C)", "wall1corner", GRAY},
+    {"Door 1 (Greek 1)", "wall1", BLUE},
+    {"Door 2 (Greek 2)", "wall1", DARKBLUE},
+    {"Door 3 (Egyptian)", "wall1", PURPLE},
+    {"Door 4 (Nordic)", "wall1", DARKPURPLE},
+    {"Door 5 (Boss)", "wall1", RED},
     {"Floor A (Press C)", "floor11", LIGHTGRAY}, {"Floor B (Press C)", "floor12", LIGHTGRAY},
     {"Arch (Press C)", "arch1", GRAY}, {"ArchArch (Press C)", "archarch1", GRAY},
     
@@ -67,17 +72,32 @@ std::vector<SpawnableProp> spawnList = {
     {"Painters Tape", "Time Hotel 5.25 Painters Tape", BLUE}, {"Saw", "Saw", GRAY},
     {"Pixel Glasses", "Pixel Sunglasses", BLACK}, {"Sunglasses", "Sunglasses", BLACK},
     {"Glove", "Glove", WHITE}, {"Broom", "Broom", BROWN}, {"Sponge", "Sponge", YELLOW},
-    {"Bag", "Bag", BROWN}, {"Extinguisher", "Fire Extinguisher", RED}, {"Coin", "Coin", GOLD},
-    {"Sandal", "Sandal", BROWN}, {"Coin Pouch", "Coin Pouch", BROWN},
+    {"Bag", "Bag", BROWN}, {"Extinguisher", "Fire Extinguisher", RED},
+    {"Flashlight", "Time Hotel 7.07", BLACK}, 
+    {"Giant Cork", "Cork", BROWN},            
+    {"Mop", "Mop", BLUE},                     
     
-    // Exhibits
+    // Exhibits (Has Assets)
     {"Waterfall", "Waterfall", BLUE}, {"Ocean", "Ocean", BLUE},
     {"Time Hotel Sign", "Time Hotel 7.07", YELLOW},
-    {"Sisyphus Boulder", "Generic", DARKGRAY}, {"Display Vase", "Tall Vase", ORANGE},
-    {"Rocks", "rocks", GRAY}, {"Single Rock", "Rock", GRAY},
+    {"Sisyphus Boulder", "Rock", DARKGRAY}, 
+    {"Sun Disk", "Coin", YELLOW},           
+    {"Banshee Stone", "rocks", PURPLE},     
+    {"Display Vase", "Tall Vase", ORANGE},
     {"Greek Temple", "Greek Temple", WHITE}, {"Chalice", "Chalice", GOLD},
     {"Pyramid", "Pyramid", YELLOW}, {"Anubis", "Anubis Statue", BLACK},
-    {"Mjolnir", "mjolner", GRAY}
+    {"Mjolnir", "mjolner", GRAY}, {"Sandal", "Sandal", BROWN},
+    {"Coin Pouch", "Coin Pouch", BROWN}, 
+    {"Aeolus Bag", "Coin Pouch", DARKBLUE}, // Reusing Coin Pouch model for the bag
+    
+    // Exhibits (Placeholders - Needs Models Later)
+    {"Medusa", "Medusa", GREEN},
+    {"Zeus Statue", "Zeus", YELLOW},
+    {"Mummy", "Mummy", BEIGE},
+    {"Gleipnir Ribbon", "Gleipnir", RED},
+    {"Sphinx", "Sphinx", GOLD},
+    {"Sphinx Nose", "SphinxNose", GOLD},
+    {"Modern Art Sticker", "Sticker", PINK}
 };
 
 bool DoButton(Rectangle rect, const char* text, Color col = {60, 60, 70, 255}) {
@@ -115,11 +135,24 @@ void ExportLevel(const std::vector<Entity>& entities) {
     std::ofstream out("Level_Export.h");
     out << "#pragma once\n#include \"Entities.h\"\n#include \"Hitboxes_Export.h\"\n\ninline void InitLevel(std::vector<Entity>& e) {\n    auto globalHitboxes = GetGlobalHitboxes();\n\n";
     for (const auto& ent : entities) {
-        out << TextFormat("    e.push_back({ \"%s\", {%.1f, %.1f, %.1f}, {0,0,0}, {0,0,1}, {}, {}, ", ent.name.c_str(), ent.position.x, ent.position.y, ent.position.z);
-        out << TextFormat("{%d,%d,%d,%d}, %s, %s, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s, %s, %.1f, %.1f, {} });\n",
-            ent.color.r, ent.color.g, ent.color.b, ent.color.a, ent.canGrab?"true":"false", ent.canThrow?"true":"false", ent.canInteract?"true":"false", ent.isSolid?"true":"false", ent.isGrabbed?"true":"false", ent.castsShadow?"true":"false", ent.is3DBlock?"true":"false", ent.isStatic?"true":"false", ent.attachedTo, ent.isGlitching?"true":"false", ent.isStone?"true":"false", ent.isUsing?"true":"false", ent.isDead?"true":"false", ent.stateTimer, ent.stateValue);
         
-        std::string baseName = GetBaseModelName(ent.name);
+        // --- NEW: AUTO-TAGGING LOGIC ---
+        std::string tagString = "{}";
+        if (ent.name == "Door 1 (Greek 1)") tagString = "{TAG_DOOR_1}";
+        else if (ent.name == "Door 2 (Greek 2)") tagString = "{TAG_DOOR_2}";
+        else if (ent.name == "Door 3 (Egyptian)") tagString = "{TAG_DOOR_3}";
+        else if (ent.name == "Door 4 (Nordic)") tagString = "{TAG_DOOR_4}";
+        else if (ent.name == "Door 5 (Boss)") tagString = "{TAG_DOOR_5}";
+        // -------------------------------
+
+        out << TextFormat("    e.push_back({ \"%s\", {%.1f, %.1f, %.1f}, {0,0,0}, {0,0,1}, {}, {}, ", ent.name.c_str(), ent.position.x, ent.position.y, ent.position.z);
+        
+        out << TextFormat("{%d,%d,%d,%d}, %s, %s, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s, %s, %.1f, %.1f, %s });\n",
+            ent.color.r, ent.color.g, ent.color.b, ent.color.a, ent.canGrab?"true":"false", ent.canThrow?"true":"false", ent.canInteract?"true":"false", ent.isSolid?"true":"false", ent.isGrabbed?"true":"false", ent.castsShadow?"true":"false", ent.is3DBlock?"true":"false", ent.isStatic?"true":"false", ent.attachedTo, ent.isGlitching?"true":"false", ent.isStone?"true":"false", ent.isUsing?"true":"false", ent.isDead?"true":"false", ent.stateTimer, ent.stateValue, tagString.c_str());
+        
+        std::string mName = ent.name;
+        for (const auto& sp : spawnList) { if (sp.name == ent.name) mName = sp.modelName; }
+        std::string baseName = GetBaseModelName(mName);
         out << "    e.back().boundsList = globalHitboxes[\"" << baseName << "\"];\n";
         out << "    e.back().interactBoundsList = globalHitboxes[\"" << baseName << "\"];\n";
     }
@@ -139,7 +172,9 @@ int main(void) {
         "stand1", "stand2", "stand3", "stand4", "ticketstand", "ticketstandseat", "wall1", "wall1corner", "wall2", "wall2corner", "wall3", "wall3corner", "wall4", "wall4corner", 
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
-        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic"
+        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
+        // NEW MISSING FILES (Will safely fail if they don't exist yet!)
+        "Medusa", "Zeus", "Mummy", "Gleipnir", "Cork", "Mop", "Sphinx", "SphinxNose", "Sticker"
     };
     for (const char* mn : modelNames) models[mn] = LoadModel(TextFormat("resources/%s.glb", mn));
 
@@ -268,8 +303,12 @@ int main(void) {
             if (pendingSpawnIdx != -1) {
                 if (IsKeyPressed(KEY_R)) { pendingRot += 90.0f; if(pendingRot >= 360.0f) pendingRot -= 360.0f; }
                 if (mousePos.x > UI_WIDTH && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    SaveState(entities); std::string mName = spawnList[pendingSpawnIdx].modelName; std::string bName = GetBaseModelName(mName);
-                    Entity newEnt = { mName, {Snap(groundHit.x, SNAP_GRID), 0, Snap(groundHit.z, SNAP_GRID)}, {0,0,0}, {0,0,1}, 
+                    SaveState(entities); 
+                    std::string dName = spawnList[pendingSpawnIdx].name;      // The Unique Name ("Door 1...")
+                    std::string mName = spawnList[pendingSpawnIdx].modelName; // The Model ("wall3")
+                    std::string bName = GetBaseModelName(mName);
+
+                    Entity newEnt = { dName, {Snap(groundHit.x, SNAP_GRID), 0, Snap(groundHit.z, SNAP_GRID)}, {0,0,0}, {0,0,1},
                                       globalHitboxes[bName], globalHitboxes[bName], spawnList[pendingSpawnIdx].color, false, false, false, true, false, true, false, false, 
                                       -1, false, false, false, false, 0.0f, pendingRot, {} };
                     if (bName == "wall1" || bName == "floor11" || bName == "arch1") newEnt.isStatic = true;
@@ -290,10 +329,14 @@ int main(void) {
             BeginMode3D(camera); DrawGrid(100, TILE_SIZE); 
 
             for (size_t i = 0; i < entities.size(); ++i) {
-                Entity& e = entities[i]; auto modIt = models.find(e.name);
-                std::string baseName = GetBaseModelName(e.name);
+                Entity& e = entities[i]; 
+                std::string mName = e.name;
+                for (const auto& sp : spawnList) { if (sp.name == e.name) mName = sp.modelName; }
+                auto modIt = models.find(mName);
+                std::string baseName = GetBaseModelName(mName);
                 
-                if (modIt != models.end()) {
+                // NEW: Added meshCount > 0 safety check!
+                if (modIt != models.end() && modIt->second.meshCount > 0) {
                     ModelTweak& tweak = globalTweaks[baseName];
                     float rad = e.stateValue * DEG2RAD; float cosR = cos(rad); float sinR = sin(rad);
                     Vector3 rotatedOffset = { tweak.offset.x * cosR + tweak.offset.z * sinR, tweak.offset.y, -tweak.offset.x * sinR + tweak.offset.z * cosR };
@@ -324,7 +367,8 @@ int main(void) {
                 Vector3 snapHit = { Snap(groundHit.x, SNAP_GRID), 0.0f, Snap(groundHit.z, SNAP_GRID) };
                 auto modIt = models.find(spawnList[pendingSpawnIdx].modelName);
                 std::string baseName = GetBaseModelName(spawnList[pendingSpawnIdx].modelName);
-                if (modIt != models.end()) DrawModelEx(modIt->second, snapHit, {0, 1, 0}, pendingRot, {globalTweaks[baseName].scale, globalTweaks[baseName].scale, globalTweaks[baseName].scale}, Fade(WHITE, 0.6f));
+                // NEW: Added meshCount > 0 safety check here too!
+                if (modIt != models.end() && modIt->second.meshCount > 0) DrawModelEx(modIt->second, snapHit, {0, 1, 0}, pendingRot, {globalTweaks[baseName].scale, globalTweaks[baseName].scale, globalTweaks[baseName].scale}, Fade(WHITE, 0.6f));
                 else { DrawCube(snapHit, 40, 40, 40, Fade(spawnList[pendingSpawnIdx].color, 0.6f)); }
             }
             EndMode3D();
@@ -351,7 +395,7 @@ int main(void) {
                     BeginScissorMode(btn.x, btn.y, btn.width, btn.height);
                     BeginMode3D(iconCam);
                     auto modIt = models.find(spawnList[i].modelName);
-                    if (modIt != models.end()) DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
+                    if (modIt != models.end() && modIt->second.meshCount > 0) DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
                     else { DrawCube({0,50,0}, 60, 60, 60, spawnList[i].color); DrawCubeWires({0,50,0}, 60, 60, 60, BLACK); }
                     EndMode3D(); EndScissorMode();
                     DrawText(spawnList[i].name.c_str(), btn.x + 15, btn.y + 15, 20, RAYWHITE);
@@ -373,7 +417,7 @@ int main(void) {
 
             BeginMode3D(hitCam); DrawGrid(10, 50.0f);
             auto modIt = models.find(activeType); Vector3 vScale = {tweak.scale, tweak.scale, tweak.scale};
-            if (modIt != models.end()) DrawModelEx(modIt->second, tweak.offset, {0,1,0}, tweak.rot, vScale, WHITE); else DrawCube(tweak.offset, 40, 40, 40, GRAY);
+            if (modIt != models.end() && modIt->second.meshCount > 0) DrawModelEx(modIt->second, tweak.offset, {0,1,0}, tweak.rot, vScale, WHITE); else DrawCube(tweak.offset, 40, 40, 40, GRAY);
             for (size_t i = 0; i < boxes.size(); ++i) {
                 Vector3 size = { boxes[i].max.x - boxes[i].min.x, boxes[i].max.y - boxes[i].min.y, boxes[i].max.z - boxes[i].min.z };
                 Vector3 center = { boxes[i].min.x + size.x/2.0f, boxes[i].min.y + size.y/2.0f, boxes[i].min.z + size.z/2.0f };
