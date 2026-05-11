@@ -81,7 +81,7 @@ std::vector<SpawnableProp> spawnList = {
     {"Waterfall", "Waterfall", BLUE}, {"Ocean", "Ocean", BLUE},
     {"Time Hotel Sign", "Time Hotel 7.07", YELLOW},
     {"Sisyphus Boulder", "Rock", DARKGRAY}, 
-    {"Sun Disk", "Coin", YELLOW},           
+    {"Sun Disk", "Coin", YELLOW},            
     {"Banshee Stone", "rocks", PURPLE},     
     {"Display Vase", "Tall Vase", ORANGE},
     {"Greek Temple", "Greek Temple", WHITE}, {"Chalice", "Chalice", GOLD},
@@ -97,7 +97,16 @@ std::vector<SpawnableProp> spawnList = {
     {"Gleipnir Ribbon", "Gleipnir", RED},
     {"Sphinx", "Sphinx", GOLD},
     {"Sphinx Nose", "SphinxNose", GOLD},
-    {"Modern Art Sticker", "Sticker", PINK}
+    {"Modern Art Sticker", "Sticker", PINK},
+
+    // --- NEW: PHASE 2 PROPS ---
+    {"Pandora's Box", "PandoraBox", DARKPURPLE},
+    {"Employee Handbook", "Handbook", DARKGRAY},
+    {"Brochure 1", "Brochure1", SKYBLUE},
+    {"Brochure 2", "Brochure2", BLUE},
+    {"Brochure 3", "Brochure3", PURPLE},
+    {"Brochure 4", "Brochure4", DARKPURPLE},
+    {"Brochure 5", "Brochure5", RED}
 };
 
 bool DoButton(Rectangle rect, const char* text, Color col = {60, 60, 70, 255}) {
@@ -174,7 +183,8 @@ int main(void) {
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
         // NEW MISSING FILES (Will safely fail if they don't exist yet!)
-        "Medusa", "Zeus", "Mummy", "Gleipnir", "Cork", "Mop", "Sphinx", "SphinxNose", "Sticker"
+        "Medusa", "Zeus", "Mummy", "Gleipnir", "Cork", "Mop", "Sphinx", "SphinxNose", "Sticker",
+        "PandoraBox", "Handbook", "Brochure1", "Brochure2", "Brochure3", "Brochure4", "Brochure5"
     };
     for (const char* mn : modelNames) models[mn] = LoadModel(TextFormat("resources/%s.glb", mn));
 
@@ -198,7 +208,18 @@ int main(void) {
     for (const auto& sp : spawnList) {
         std::string baseName = GetBaseModelName(sp.modelName);
         if (globalHitboxes.find(baseName) == globalHitboxes.end()) {
-            globalHitboxes[baseName] = { {{-20, 0, -20}, {20, 40, 20}} }; // Default backup box
+            
+            // --- NEW: CUSTOM PLACEHOLDER SHAPES ---
+            if (baseName == "Handbook" || baseName.find("Brochure") != std::string::npos) {
+                globalHitboxes[baseName] = { {{-15, 0, -20}, {15, 5, 20}} }; // Thin Book Shape
+            } 
+            else if (baseName == "PandoraBox") {
+                globalHitboxes[baseName] = { {{-30, 0, -30}, {30, 40, 30}} }; // Big Chest Shape
+            } 
+            else {
+                globalHitboxes[baseName] = { {{-20, 0, -20}, {20, 40, 20}} }; // Default backup box
+            }
+            
             globalTweaks[baseName] = { 100.0f, {0,0,0}, 0.0f }; // Default backup scale
         }
     }
@@ -395,8 +416,21 @@ int main(void) {
                     BeginScissorMode(btn.x, btn.y, btn.width, btn.height);
                     BeginMode3D(iconCam);
                     auto modIt = models.find(spawnList[i].modelName);
-                    if (modIt != models.end() && modIt->second.meshCount > 0) DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
-                    else { DrawCube({0,50,0}, 60, 60, 60, spawnList[i].color); DrawCubeWires({0,50,0}, 60, 60, 60, BLACK); }
+                    
+                    if (modIt != models.end() && modIt->second.meshCount > 0) {
+                        DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
+                    } else { 
+                        // --- NEW: UI PLACEHOLDER SIZES ---
+                        Vector3 phSize = {60, 60, 60}; // Default Cube
+                        if (spawnList[i].modelName == "Handbook" || spawnList[i].modelName.find("Brochure") != std::string::npos) {
+                            phSize = {40, 10, 50}; // Flat Book UI
+                        } else if (spawnList[i].modelName == "PandoraBox") {
+                            phSize = {70, 50, 70}; // Wide Box UI
+                        }
+                        DrawCube({0,50,0}, phSize.x, phSize.y, phSize.z, spawnList[i].color); 
+                        DrawCubeWires({0,50,0}, phSize.x, phSize.y, phSize.z, BLACK); 
+                    }
+                    
                     EndMode3D(); EndScissorMode();
                     DrawText(spawnList[i].name.c_str(), btn.x + 15, btn.y + 15, 20, RAYWHITE);
                 }

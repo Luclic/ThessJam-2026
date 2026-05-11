@@ -1904,4 +1904,25 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "Modern Art Sticker", {-590.0, 0.0, 900.0}, {0,0,0}, {0,0,1}, {}, {}, {255,109,194,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
     e.back().boundsList = globalHitboxes["Sticker"];
     e.back().interactBoundsList = globalHitboxes["Sticker"];
+    e.push_back({ "Pandora's Box", {3910.0, 0.0, 520.0}, {0,0,0}, {0,0,1}, {}, {}, {112,31,126,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["PandoraBox"];
+    e.back().interactBoundsList = globalHitboxes["PandoraBox"];
+    e.push_back({ "Employee Handbook", {-590.0, 0.0, 660.0}, {0,0,0}, {0,0,1}, {}, {}, {80,80,80,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Handbook"];
+    e.back().interactBoundsList = globalHitboxes["Handbook"];
+    e.push_back({ "Brochure 1", {150.0, 0.0, 750.0}, {0,0,0}, {0,0,1}, {}, {}, {102,191,255,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Brochure1"];
+    e.back().interactBoundsList = globalHitboxes["Brochure1"];
+    e.push_back({ "Brochure 2", {1670.0, 0.0, 730.0}, {0,0,0}, {0,0,1}, {}, {}, {0,121,241,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Brochure2"];
+    e.back().interactBoundsList = globalHitboxes["Brochure2"];
+    e.push_back({ "Brochure 3", {2020.0, 0.0, -460.0}, {0,0,0}, {0,0,1}, {}, {}, {200,122,255,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Brochure3"];
+    e.back().interactBoundsList = globalHitboxes["Brochure3"];
+    e.push_back({ "Brochure 4", {1850.0, 0.0, 1690.0}, {0,0,0}, {0,0,1}, {}, {}, {112,31,126,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Brochure4"];
+    e.back().interactBoundsList = globalHitboxes["Brochure4"];
+    e.push_back({ "Brochure 5", {3450.0, 0.0, 780.0}, {0,0,0}, {0,0,1}, {}, {}, {230,41,55,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Brochure5"];
+    e.back().interactBoundsList = globalHitboxes["Brochure5"];
 }
