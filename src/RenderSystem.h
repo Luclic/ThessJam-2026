@@ -78,7 +78,7 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
                     Vector3 toObj = Vector3Subtract(center, cam3D.position);
                     Vector3 camForward = Vector3Subtract(cam3D.target, cam3D.position);
                     if (Vector3DotProduct(toObj, camForward) > 0.0f) {
-                        floatingTexts.push_back({ GetWorldToScreen({center.x, b.max.y + 20.0f, center.z}, cam3D), e->name });
+                        floatingTexts.push_back({ GetWorldToScreenEx({center.x, b.max.y + 20.0f, center.z}, cam3D, renderTarget.texture.width, renderTarget.texture.height), e->name });
                     }                }
             }
         }

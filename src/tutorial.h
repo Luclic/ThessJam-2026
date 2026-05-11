@@ -6,13 +6,14 @@
 inline void UpdateAndRenderTutorial(int& currentState, const std::vector<Entity>& entities, int grabbedEntityIndex, float& shiftTimer, bool& tutorialFinished, int& tutorialStep, bool playerJumpedThisFrame) {
     
     // Debug Skip
-    if (IsKeyPressed(KEY_ONE)) { tutorialStep = 5; }
+    if (IsKeyPressed(KEY_M)) { tutorialStep = 5; }
 
     if (tutorialStep == 0) {
         if (playerJumpedThisFrame) tutorialStep = 1;
     } 
     else if (tutorialStep == 1) {
         if (grabbedEntityIndex != -1 && entities[grabbedEntityIndex].HasTag(TAG_HANDBOOK)) tutorialStep = 2;
+        
     }
     // Step 2 is advanced in Overlay.h when they close the book!
     else if (tutorialStep == 3) {
@@ -40,7 +41,7 @@ inline void UpdateAndRenderTutorial(int& currentState, const std::vector<Entity>
     switch(tutorialStep) {
         case 0: inst = "TUTORIAL: Use WASD to move. Press SPACE to jump."; break;
         case 1: inst = "TUTORIAL: Good. Now approach the table and press 'E' to grab the Employee Handbook."; break;
-        case 2: inst = "TUTORIAL: Hold the Handbook and press 'F' to read it."; break;
+        case 2: inst = "TUTORIAL: Press 'F' to read it."; break;
         case 3: inst = "TUTORIAL: Now grab the Sunglasses. Press 'SPACE' to throw and break them!"; break;
         case 4: inst = "TUTORIAL: Oops! Grab the Painters Tape and approach the broken glasses. Press 'F' to repair."; break;
     }

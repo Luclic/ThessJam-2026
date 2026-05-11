@@ -1,501 +1,502 @@
 #include "raylib.h"
 #include "raymath.h"
+#include <algorithm>
+#include <vector>
 #include "Entities.h"
 #include "Level.h"
-#include "Hitboxes_Export.h"
-#include <vector>
-#include <string>
+#include "Interactions.h"
+#include "Evaluation.h"
+#include "SaveSystem.h"
+#include "GameSystems.h"
+#include "RenderSystem.h"
+#include "Menu.h"      
+#include "Tutorial.h"  
+#include "Overlay.h"   
 #include <unordered_map>
-#include <fstream>
-#include <iostream>
-#include <algorithm>
+#include <string>
 
-#ifndef TILE_SIZE
-const float TILE_SIZE = 200.0f;
-#endif
+const int idxIdle = 4;
+const int idxInteract = 10;
+const int idxRoll = 15;
+const int idxRun = 24;
+const int idxWalk = 30;
 
-const float SNAP_GRID = 10.0f;
-const int UI_WIDTH = 450; 
+enum GameState { STATE_MENU, STATE_OPTIONS, STATE_TUTORIAL, STATE_PLAYING, STATE_REVIEW, STATE_GAMEOVER_FIRED, STATE_GAMEOVER_DEATH };
 
-enum EditorMode { MODE_LEVEL, MODE_HITBOX };
-EditorMode currentMode = MODE_LEVEL;
+const float SHIFT_DURATION = 180.0f; 
+const float SECONDS_PER_HOUR = 22.5f;
 
-inline float Snap(float value, float step) { return std::round(value / step) * step; }
+GameState currentState = STATE_MENU;
+Camera2D camera = { 0 };
+std::vector<Entity> entities;
+std::unordered_map<std::string, Model> models;
 
-// --- Global Dictionaries ---
-std::unordered_map<std::string, std::vector<BoundingBox>> globalHitboxes;
-std::unordered_map<std::string, ModelTweak> globalTweaks;
-std::vector<std::string> uniqueTypes;
+int grabbedEntityIndex = -1;
+int equippedEyewear = -1; 
+int equippedGloves = -1; 
 
-int currentPropIdx = 0;
-int currentBoxIdx = 0;
-float spawnScrollY = 0.0f; 
+int currentNight = 1;
+float shiftTimer = 0.0f;
+ShiftReport lastReport;
 
-struct HistoryState { std::vector<Entity> entities; };
-std::vector<HistoryState> undoHistory;
+bool showInteractMenu = false;
+bool isDropMenu = false;
+std::vector<int> interactTargets;
+int interactSelectedIndex = 0;
+bool doorsOpen[5] = {false, false, false, false, false};
 
-void SaveState(const std::vector<Entity>& currentEnts) {
-    undoHistory.push_back({currentEnts});
-    if (undoHistory.size() > 50) undoHistory.erase(undoHistory.begin());
+// --- SYSTEM VARS ---
+int tutorialStep = 0;
+bool isOverlayActive = false;
+
+// --- GLOBAL AUDIO TRACKS ---
+Music tutorialMusic;
+Music mainMusic; 
+bool isMainMusicLoaded = false;
+Music deathMusic;
+Music newsMusic;
+Music reviewsMusic;
+float mainMusicVolume = 1.0f; 
+
+void GoToMenu() {
+    currentState = STATE_MENU;
+    entities.clear();
+    InitLevel(entities);
+    AssignEntityRules(entities);
+    for(int i = 0; i < 5; i++) doorsOpen[i] = false; 
+    if (!IsMusicStreamPlaying(tutorialMusic)) PlayMusicStream(tutorialMusic);
 }
 
-struct SpawnableProp { std::string name; std::string modelName; Color color; };
-std::vector<SpawnableProp> spawnList = {
-    // Architectural & Doors
-    {"Wall (Press C)", "wall1", GRAY}, {"Wall Corner (Press C)", "wall1corner", GRAY},
-    {"Door 1 (Greek 1)", "wall1", BLUE},
-    {"Door 2 (Greek 2)", "wall1", DARKBLUE},
-    {"Door 3 (Egyptian)", "wall1", PURPLE},
-    {"Door 4 (Nordic)", "wall1", DARKPURPLE},
-    {"Door 5 (Boss)", "wall1", RED},
-    {"Floor A (Press C)", "floor11", LIGHTGRAY}, {"Floor B (Press C)", "floor12", LIGHTGRAY},
-    {"Arch (Press C)", "arch1", GRAY}, {"ArchArch (Press C)", "archarch1", GRAY},
+void ResetNight() {
+    entities.clear();
+    InitLevel(entities);
     
-    // Furniture & Fixtures
-    {"Pedestal 1", "stand1", GRAY}, {"Pedestal 2", "stand2", GRAY}, 
-    {"Pedestal 3", "stand3", GRAY}, {"Pedestal 4", "stand4", GRAY},
-    {"Ticket Stand", "ticketstand", BROWN}, {"Ticket Seat", "ticketstandseat", BROWN},
-    {"Bench 1", "bench1", BROWN}, {"Bench 2", "bench2", BROWN}, {"Bench 3", "bench3", BROWN},
-    {"Desk", "desk", BROWN}, {"Glass Case", "glasscase", SKYBLUE},
-    {"Pillar 1", "pillar1", WHITE}, {"Pillar 2", "pillar2", WHITE},
-    {"Rope 1", "rope1", RED}, {"Rope 2", "rope2", RED}, {"Fence", "fence", BROWN},
-    {"Wall Shelf", "Wall Shelf", BROWN}, {"Shelves", "Shelves", BROWN},
-    
-    // Decor & Lighting
-    {"Light 1", "light1", YELLOW}, {"Light 2", "light2", YELLOW}, 
-    {"Painting 1", "painting1", ORANGE}, {"Painting 2", "painting2", ORANGE}, {"Painting Light", "paintinglight", YELLOW},
-    {"Sign 1", "sign1", GRAY}, {"Sign 2", "sign2", GRAY}, {"Sign 3", "sign3", GRAY},
-    {"Artifact Sign 1", "artifactsign1", LIGHTGRAY}, {"Artifact Sign 2", "artifactsign2", LIGHTGRAY},
-    {"Cardboard Boxes", "Cardboard Boxes", BROWN},
-    
-    // Tools & Items
-    {"Painters Tape", "Time Hotel 5.25 Painters Tape", BLUE}, {"Saw", "Saw", GRAY},
-    {"Pixel Glasses", "Pixel Sunglasses", BLACK}, {"Sunglasses", "Sunglasses", BLACK},
-    {"Glove", "Glove", WHITE}, {"Broom", "Broom", BROWN}, {"Sponge", "Sponge", YELLOW},
-    {"Bag", "Bag", BROWN}, {"Extinguisher", "Fire Extinguisher", RED},
-    {"Flashlight", "Time Hotel 7.07", BLACK}, 
-    {"Giant Cork", "Cork", BROWN},            
-    {"Mop", "Mop", BLUE},                     
-    
-    // Exhibits (Has Assets)
-    {"Waterfall", "Waterfall", BLUE}, {"Ocean", "Ocean", BLUE},
-    {"Time Hotel Sign", "Time Hotel 7.07", YELLOW},
-    {"Sisyphus Boulder", "Rock", DARKGRAY}, 
-    {"Sun Disk", "Coin", YELLOW},            
-    {"Banshee Stone", "rocks", PURPLE},     
-    {"Display Vase", "Tall Vase", ORANGE},
-    {"Greek Temple", "Greek Temple", WHITE}, {"Chalice", "Chalice", GOLD},
-    {"Pyramid", "Pyramid", YELLOW}, {"Anubis", "Anubis Statue", BLACK},
-    {"Mjolnir", "mjolner", GRAY}, {"Sandal", "Sandal", BROWN},
-    {"Coin Pouch", "Coin Pouch", BROWN}, 
-    {"Aeolus Bag", "Coin Pouch", DARKBLUE}, // Reusing Coin Pouch model for the bag
-    
-    // Exhibits (Placeholders - Needs Models Later)
-    {"Medusa", "Medusa", GREEN},
-    {"Zeus Statue", "Zeus", YELLOW},
-    {"Mummy", "Mummy", BEIGE},
-    {"Gleipnir Ribbon", "Gleipnir", RED},
-    {"Sphinx", "Sphinx", GOLD},
-    {"Sphinx Nose", "SphinxNose", GOLD},
-    {"Modern Art Sticker", "Sticker", PINK},
-
-    // --- NEW: PHASE 2 PROPS ---
-    {"Pandora's Box", "PandoraBox", DARKPURPLE},
-    {"Employee Handbook", "Handbook", DARKGRAY},
-    {"Brochure 1", "Brochure1", SKYBLUE},
-    {"Brochure 2", "Brochure2", BLUE},
-    {"Brochure 3", "Brochure3", PURPLE},
-    {"Brochure 4", "Brochure4", DARKPURPLE},
-    {"Brochure 5", "Brochure5", RED}
-};
-
-bool DoButton(Rectangle rect, const char* text, Color col = {60, 60, 70, 255}) {
-    Vector2 mouse = GetMousePosition();
-    bool hover = CheckCollisionPointRec(mouse, rect);
-    if (hover && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) DrawRectangleRec(rect, {40, 40, 50, 255});
-    else if (hover) DrawRectangleRec(rect, {80, 80, 90, 255});
-    else DrawRectangleRec(rect, col);
-    DrawRectangleLinesEx(rect, 2, BLACK);
-    DrawText(text, rect.x + (rect.width/2) - (MeasureText(text, 20)/2), rect.y + (rect.height/2) - 10, 20, WHITE);
-    return hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-}
-
-void ExportHitboxes() {
-    std::ofstream out("Hitboxes_Export.h");
-    out << "#pragma once\n#include \"raylib.h\"\n#include <unordered_map>\n#include <vector>\n#include <string>\n\n";
-    out << "inline std::unordered_map<std::string, std::vector<BoundingBox>> GetGlobalHitboxes() {\n    return {\n";
-    for (const auto& type : uniqueTypes) {
-        out << TextFormat("        {\"%s\", {\n", type.c_str());
-        for (const auto& b : globalHitboxes[type]) out << TextFormat("            {{%.1f, %.1f, %.1f}, {%.1f, %.1f, %.1f}},\n", b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z);
-        out << "        }},\n";
+    // INJECT TUTORIAL PROPS IF NIGHT 1
+    if (currentNight == 1) {
+        Vector3 pSpawn = entities[0].position;
+        Entity handbook = MakeProp("Employee Handbook", {pSpawn.x, 20, pSpawn.z + 100}, {{-20,-5,-20},{20,5,20}}, DARKGRAY, {});
+        entities.push_back(handbook);
+        Entity shades = MakeProp("Sunglasses", {pSpawn.x + 100, 20, pSpawn.z + 100}, {{-15,-5,-15},{15,5,15}}, BLACK, {});
+        entities.push_back(shades);
     }
-    out << "    };\n}\n\n";
-    out << "struct ModelTweak { float scale; Vector3 offset; float rot; };\n";
-    out << "inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {\n    return {\n";
-    for (const auto& type : uniqueTypes) {
-        ModelTweak t = globalTweaks[type];
-        out << TextFormat("        {\"%s\", {%.1f, {%.1f, %.1f, %.1f}, %.1f}},\n", type.c_str(), t.scale, t.offset.x, t.offset.y, t.offset.z, t.rot);
-    }
-    out << "    };\n}\n"; out.close();
-    std::cout << "SUCCESS: Exported Hitboxes!\n";
-}
+    
+    AssignEntityRules(entities); 
 
-void ExportLevel(const std::vector<Entity>& entities) {
-    std::ofstream out("Level_Export.h");
-    out << "#pragma once\n#include \"Entities.h\"\n#include \"Hitboxes_Export.h\"\n\ninline void InitLevel(std::vector<Entity>& e) {\n    auto globalHitboxes = GetGlobalHitboxes();\n\n";
-    for (const auto& ent : entities) {
-        
-        // --- NEW: AUTO-TAGGING LOGIC ---
-        std::string tagString = "{}";
-        if (ent.name == "Door 1 (Greek 1)") tagString = "{TAG_DOOR_1}";
-        else if (ent.name == "Door 2 (Greek 2)") tagString = "{TAG_DOOR_2}";
-        else if (ent.name == "Door 3 (Egyptian)") tagString = "{TAG_DOOR_3}";
-        else if (ent.name == "Door 4 (Nordic)") tagString = "{TAG_DOOR_4}";
-        else if (ent.name == "Door 5 (Boss)") tagString = "{TAG_DOOR_5}";
-        // -------------------------------
+    grabbedEntityIndex = -1;
+    equippedEyewear = -1; 
+    equippedGloves = -1; 
+    shiftTimer = 0.0f;
+    tutorialStep = 0; 
+    isOverlayActive = false;
+    showInteractMenu = false;
+    
+    for(int i = 0; i < 5; i++) doorsOpen[i] = false;
+    if (currentNight >= 1) doorsOpen[0] = true;
+    if (currentNight >= 2) doorsOpen[1] = true;
+    if (currentNight >= 3) doorsOpen[2] = true;
+    if (currentNight >= 4) doorsOpen[3] = true;
+    if (currentNight >= 5) doorsOpen[4] = true;
 
-        out << TextFormat("    e.push_back({ \"%s\", {%.1f, %.1f, %.1f}, {0,0,0}, {0,0,1}, {}, {}, ", ent.name.c_str(), ent.position.x, ent.position.y, ent.position.z);
-        
-        out << TextFormat("{%d,%d,%d,%d}, %s, %s, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s, %s, %.1f, %.1f, %s });\n",
-            ent.color.r, ent.color.g, ent.color.b, ent.color.a, ent.canGrab?"true":"false", ent.canThrow?"true":"false", ent.canInteract?"true":"false", ent.isSolid?"true":"false", ent.isGrabbed?"true":"false", ent.castsShadow?"true":"false", ent.is3DBlock?"true":"false", ent.isStatic?"true":"false", ent.attachedTo, ent.isGlitching?"true":"false", ent.isStone?"true":"false", ent.isUsing?"true":"false", ent.isDead?"true":"false", ent.stateTimer, ent.stateValue, tagString.c_str());
-        
-        std::string mName = ent.name;
-        for (const auto& sp : spawnList) { if (sp.name == ent.name) mName = sp.modelName; }
-        std::string baseName = GetBaseModelName(mName);
-        out << "    e.back().boundsList = globalHitboxes[\"" << baseName << "\"];\n";
-        out << "    e.back().interactBoundsList = globalHitboxes[\"" << baseName << "\"];\n";
-    }
-    out << "}\n"; out.close();
-    std::cout << "SUCCESS: Exported Level!\n";
+    if (currentNight > 1) LoadGame(currentNight, entities); 
+    SetupNightHazards(currentNight, entities); 
+
+    if (isMainMusicLoaded) UnloadMusicStream(mainMusic);    
+    int trackNum = std::min(currentNight, 5); 
+    mainMusic = LoadMusicStream(TextFormat("resources/music/main_theme%d.ogg", trackNum));
+    isMainMusicLoaded = true;
+
+    mainMusic.looping = false; 
+    SetMusicVolume(mainMusic, mainMusicVolume);
 }
 
 int main(void) {
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-    InitWindow(1600, 900, "Museum Tech Support - MAP & HITBOX EDITOR");
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetTraceLogLevel(LOG_WARNING);
+    InitWindow(1280, 960, "Museum Tech Support");
+    
+    InitAudioDevice();
+    tutorialMusic = LoadMusicStream("resources/music/tutorial.ogg");
+    deathMusic = LoadMusicStream("resources/music/death.ogg");
+    newsMusic = LoadMusicStream("resources/music/news.ogg"); 
+    reviewsMusic = LoadMusicStream("resources/music/reviews.ogg");
+    
+    tutorialMusic.looping = true;
+    deathMusic.looping = false;
+    newsMusic.looping = true;
+    reviewsMusic.looping = true;
+
     SetTargetFPS(60);
 
-    std::unordered_map<std::string, Model> models;
     const char* modelNames[] = {
         "artifactsign2", "bench1", "bench2", "bench3", "desk", "fence", "floor11", "floor12", "floor21", "floor22", "floor31", "floor32", "floor41", "floor42", 
         "glasscase", "light1", "light2", "painting1", "painting2", "paintinglight", "pillar1", "pillar2", "rope1", "rope2", "sign1", "sign2", "sign3", 
         "stand1", "stand2", "stand3", "stand4", "ticketstand", "ticketstandseat", "wall1", "wall1corner", "wall2", "wall2corner", "wall3", "wall3corner", "wall4", "wall4corner", 
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
-        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
-        // NEW MISSING FILES (Will safely fail if they don't exist yet!)
-        "Medusa", "Zeus", "Mummy", "Gleipnir", "Cork", "Mop", "Sphinx", "SphinxNose", "Sticker",
-        "PandoraBox", "Handbook", "Brochure1", "Brochure2", "Brochure3", "Brochure4", "Brochure5"
+        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic"
     };
-    for (const char* mn : modelNames) models[mn] = LoadModel(TextFormat("resources/%s.glb", mn));
-
-    std::vector<Entity> entities;
-    InitLevel(entities); 
-
-    globalHitboxes = GetGlobalHitboxes();
-    globalTweaks = GetGlobalTweaks();
+    for (const char* mn : modelNames) { models[mn] = LoadModel(TextFormat("resources/%s.glb", mn)); }
     
-    // 1. Process entities from Level
-    entities.erase(std::remove_if(entities.begin(), entities.end(), [](const Entity& e){ return e.name == "PhysicsWall"; }), entities.end());
-    for (auto& e : entities) {
-        std::string baseName = GetBaseModelName(e.name);
-        if (baseName == "wall1" || baseName == "arch1") { if (e.boundsList.empty()) { e.boundsList.push_back({{-100, 0, -20}, {100, 100, 20}}); e.isSolid = true; } }
-        if (globalHitboxes.find(baseName) == globalHitboxes.end()) {
-            globalHitboxes[baseName] = e.boundsList; globalTweaks[baseName] = { 100.0f, {0,0,0}, 0.0f };
-        }
-    }
-    
-    // 2. Pre-register ALL unplaced models from the Spawn List so they appear in Hitbox Editor!
-    for (const auto& sp : spawnList) {
-        std::string baseName = GetBaseModelName(sp.modelName);
-        if (globalHitboxes.find(baseName) == globalHitboxes.end()) {
-            
-            // --- NEW: CUSTOM PLACEHOLDER SHAPES ---
-            if (baseName == "Handbook" || baseName.find("Brochure") != std::string::npos) {
-                globalHitboxes[baseName] = { {{-15, 0, -20}, {15, 5, 20}} }; // Thin Book Shape
-            } 
-            else if (baseName == "PandoraBox") {
-                globalHitboxes[baseName] = { {{-30, 0, -30}, {30, 40, 30}} }; // Big Chest Shape
-            } 
-            else {
-                globalHitboxes[baseName] = { {{-20, 0, -20}, {20, 40, 20}} }; // Default backup box
-            }
-            
-            globalTweaks[baseName] = { 100.0f, {0,0,0}, 0.0f }; // Default backup scale
-        }
-    }
+    models["Player"] = LoadModel("resources/worker.glb"); 
+    int animCount = 0;
+    ModelAnimation* anims = LoadModelAnimations("resources/worker.glb", &animCount);
+    float animTimer = 0.0f;
+    int currentAnimState = 0; 
+        
+    RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
+    SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
-    // 3. Build uniqueTypes array to power the Hitbox Editor selection
-    for (const auto& pair : globalHitboxes) uniqueTypes.push_back(pair.first);
+    InitLevel(entities);
+    if (!LoadGame(currentNight, entities)) currentNight = 1; 
+    camera.zoom = 1.0f;
 
-    SaveState(entities); 
-
-    Camera3D camera = { { 0.0f, 2500.0f, 1500.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f, CAMERA_PERSPECTIVE };
-    Camera3D iconCam = { { 200.0f, 150.0f, 200.0f }, { 0.0f, 50.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f, CAMERA_PERSPECTIVE };
-
-    std::vector<int> selectedIndices; std::vector<Entity> clipboard;
-    bool isDragging = false; std::vector<Vector3> dragOffsets; bool justSavedState = false;
-    float hitCamAngle = 45.0f; float hitCamDist = 300.0f; float hitCamHeight = 200.0f;
-    int pendingSpawnIdx = -1; float pendingRot = 0.0f;
+    GoToMenu();
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
-        Vector2 mousePos = GetMousePosition();
-        Ray ray = GetMouseRay(mousePos, camera);
-        float t = -ray.position.y / ray.direction.y;
-        Vector3 groundHit = { ray.position.x + ray.direction.x * t, 0.0f, ray.position.z + ray.direction.z * t };
 
-        bool ctrlPressed = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-        bool shiftPressed = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        if (isMainMusicLoaded) UpdateMusicStream(mainMusic);
+        UpdateMusicStream(tutorialMusic);
+        UpdateMusicStream(deathMusic);
+        UpdateMusicStream(newsMusic);
+        UpdateMusicStream(reviewsMusic);
 
-        if (IsKeyPressed(KEY_ONE)) {
-            currentMode = (currentMode == MODE_LEVEL) ? MODE_HITBOX : MODE_LEVEL;
-            if (currentMode == MODE_LEVEL) {
-                for (auto& e : entities) { std::string bn = GetBaseModelName(e.name); if (globalHitboxes.count(bn)) { e.boundsList = globalHitboxes[bn]; e.interactBoundsList = globalHitboxes[bn]; } }
-            }
-        }
-        if (IsKeyPressed(KEY_FOUR)) ExportHitboxes();
-        if (IsKeyPressed(KEY_FIVE)) ExportLevel(entities);
-
-        if (currentMode == MODE_LEVEL) {
-            float camSpeed = 1500.0f * dt;
-            if (IsKeyDown(KEY_W)) { camera.position.z -= camSpeed; camera.target.z -= camSpeed; }
-            if (IsKeyDown(KEY_S)) { camera.position.z += camSpeed; camera.target.z += camSpeed; }
-            if (IsKeyDown(KEY_A)) { camera.position.x -= camSpeed; camera.target.x -= camSpeed; }
-            if (IsKeyDown(KEY_D)) { camera.position.x += camSpeed; camera.target.x += camSpeed; }
-            camera.position.y -= GetMouseWheelMove() * 300.0f;
-
-            if (ctrlPressed && IsKeyPressed(KEY_Z) && undoHistory.size() > 1) { undoHistory.pop_back(); entities = undoHistory.back().entities; selectedIndices.clear(); pendingSpawnIdx = -1; }
-            if (ctrlPressed && IsKeyPressed(KEY_C) && !selectedIndices.empty()) { clipboard.clear(); for (int idx : selectedIndices) clipboard.push_back(entities[idx]); }
-            if (ctrlPressed && IsKeyPressed(KEY_V) && !clipboard.empty()) {
-                SaveState(entities); selectedIndices.clear();
-                Vector3 centerPoint = clipboard[0].position; 
-                for (auto& clipEnt : clipboard) {
-                    Entity newEnt = clipEnt; Vector3 offset = Vector3Subtract(clipEnt.position, centerPoint);
-                    newEnt.position = Vector3Add(groundHit, offset); newEnt.position.x = Snap(newEnt.position.x, SNAP_GRID); newEnt.position.z = Snap(newEnt.position.z, SNAP_GRID);
-                    entities.push_back(newEnt); selectedIndices.push_back(entities.size() - 1);
-                }
-            }
-
-            if (IsKeyPressed(KEY_C) && !selectedIndices.empty()) {
-                SaveState(entities);
-                for (int idx : selectedIndices) entities[idx].name = GetNextStyle(entities[idx].name);
-            }
-
-            if (mousePos.x < UI_WIDTH) {
-                spawnScrollY += GetMouseWheelMove() * 50.0f;
-                if (spawnScrollY > 0) spawnScrollY = 0; 
-            }
-
-            if (mousePos.x > UI_WIDTH && pendingSpawnIdx == -1) { 
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    int clickedIdx = -1; float closestDist = 99999.0f;
-                    for (size_t i = 0; i < entities.size(); ++i) {
-                        std::vector<BoundingBox> projectedBounds = entities[i].GetWorldBounds();
-                        bool hit = false; float hitDist = 99999.0f;
-                        for(const auto& b : projectedBounds) { RayCollision col = GetRayCollisionBox(ray, b); if (col.hit && col.distance < hitDist) { hitDist = col.distance; hit = true; } }
-                        if (hit && hitDist < closestDist) { closestDist = hitDist; clickedIdx = i; }
-                    }
-                    if (clickedIdx != -1) {
-                        bool alreadySelected = std::find(selectedIndices.begin(), selectedIndices.end(), clickedIdx) != selectedIndices.end();
-                        if (shiftPressed) { if (!alreadySelected) selectedIndices.push_back(clickedIdx); } 
-                        else if (!alreadySelected) { selectedIndices.clear(); selectedIndices.push_back(clickedIdx); }
-                        isDragging = true; justSavedState = false; dragOffsets.clear();
-                        for (int idx : selectedIndices) dragOffsets.push_back(Vector3Subtract(entities[idx].position, groundHit));
-                    } else if (!shiftPressed) selectedIndices.clear();
-                }
-
-                if (isDragging && !selectedIndices.empty()) {
-                    if (!justSavedState) { SaveState(entities); justSavedState = true; } 
-                    for (size_t i = 0; i < selectedIndices.size(); ++i) {
-                        Vector3 newPos = Vector3Add(groundHit, dragOffsets[i]);
-                        entities[selectedIndices[i]].position.x = Snap(newPos.x, SNAP_GRID); entities[selectedIndices[i]].position.z = Snap(newPos.z, SNAP_GRID);
-                    }
-                }
-                if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) isDragging = false;
-
-                if (!selectedIndices.empty() && IsKeyPressed(KEY_R)) { SaveState(entities); for (int idx : selectedIndices) { entities[idx].stateValue += 90.0f; if (entities[idx].stateValue >= 360.0f) entities[idx].stateValue -= 360.0f; } }
-                if (!selectedIndices.empty() && (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE))) {
-                    SaveState(entities); std::sort(selectedIndices.rbegin(), selectedIndices.rend()); 
-                    for (int idx : selectedIndices) entities.erase(entities.begin() + idx);
-                    selectedIndices.clear(); isDragging = false;
-                }
-            }
-
-            if (pendingSpawnIdx != -1) {
-                if (IsKeyPressed(KEY_R)) { pendingRot += 90.0f; if(pendingRot >= 360.0f) pendingRot -= 360.0f; }
-                if (mousePos.x > UI_WIDTH && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    SaveState(entities); 
-                    std::string dName = spawnList[pendingSpawnIdx].name;      // The Unique Name ("Door 1...")
-                    std::string mName = spawnList[pendingSpawnIdx].modelName; // The Model ("wall3")
-                    std::string bName = GetBaseModelName(mName);
-
-                    Entity newEnt = { dName, {Snap(groundHit.x, SNAP_GRID), 0, Snap(groundHit.z, SNAP_GRID)}, {0,0,0}, {0,0,1},
-                                      globalHitboxes[bName], globalHitboxes[bName], spawnList[pendingSpawnIdx].color, false, false, false, true, false, true, false, false, 
-                                      -1, false, false, false, false, 0.0f, pendingRot, {} };
-                    if (bName == "wall1" || bName == "floor11" || bName == "arch1") newEnt.isStatic = true;
-                    entities.push_back(newEnt); selectedIndices.clear(); selectedIndices.push_back(entities.size() - 1); pendingSpawnIdx = -1;
-                }
-                if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) || IsKeyPressed(KEY_ESCAPE)) pendingSpawnIdx = -1;
-            }
-        } else {
-            if (mousePos.x > UI_WIDTH) {
-                if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) { hitCamAngle -= GetMouseDelta().x * 0.5f; hitCamHeight += GetMouseDelta().y * 1.0f; }
-                hitCamDist -= GetMouseWheelMove() * 30.0f; if (hitCamDist < 50.0f) hitCamDist = 50.0f;
-            }
+        // --- OUT OF BOUNDS STATES ---
+        if (currentState == STATE_REVIEW) {
+            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 2.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
+            BeginDrawing(); ClearBackground(RAYWHITE);
+            DrawText("SHIFT COMPLETE - 8:00 AM", GetScreenWidth()/2 - 200, 100, 30, BLACK);
+            DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 160, 20, DARKBLUE);
+            int yOffset = 250;
+            for (const auto& rev : lastReport.reviews) { DrawText(TextFormat("- %s: %s", rev.artifactName.c_str(), rev.reviewText.c_str()), 100, yOffset, 20, DARKGRAY); yOffset += 40; }
+            DrawText("PRESS ENTER TO CONTINUE", GetScreenWidth()/2 - 150, GetScreenHeight() - 100, 20, GREEN);
+            if (IsKeyPressed(KEY_ENTER)) { SaveGame(currentNight, entities); StopMusicStream(reviewsMusic); ResetNight(); currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
+            EndDrawing(); continue;
         }
 
-        BeginDrawing(); ClearBackground({35, 35, 40, 255});
+        if (currentState == STATE_GAMEOVER_FIRED) {
+            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 2.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
+            BeginDrawing(); ClearBackground(MAROON);
+            DrawText("YOU'RE FIRED.", GetScreenWidth()/2 - 150, 200, 50, WHITE);
+            DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
+            DrawText("PRESS ENTER TO RETRY THE NIGHT", GetScreenWidth()/2 - 200, GetScreenHeight() - 100, 20, YELLOW);
+            if (IsKeyPressed(KEY_ENTER)) { StopMusicStream(newsMusic); ResetNight(); currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
+            EndDrawing(); continue;
+        }
 
-        if (currentMode == MODE_LEVEL) {
-            BeginMode3D(camera); DrawGrid(100, TILE_SIZE); 
+        if (currentState == STATE_GAMEOVER_DEATH) {
+            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 1.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
+            BeginDrawing(); ClearBackground(RED);
+            DrawText("YOU DIED.", GetScreenWidth()/2 - 120, 200, 50, BLACK);
+            DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
+            DrawText("PRESS ENTER TO RETRY THE NIGHT", GetScreenWidth()/2 - 200, GetScreenHeight() - 100, 20, YELLOW);
+            if (IsKeyPressed(KEY_ENTER)) { StopMusicStream(deathMusic); ResetNight(); currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
+            EndDrawing(); continue;
+        }
 
-            for (size_t i = 0; i < entities.size(); ++i) {
-                Entity& e = entities[i]; 
-                std::string mName = e.name;
-                for (const auto& sp : spawnList) { if (sp.name == e.name) mName = sp.modelName; }
-                auto modIt = models.find(mName);
-                std::string baseName = GetBaseModelName(mName);
-                
-                // NEW: Added meshCount > 0 safety check!
-                if (modIt != models.end() && modIt->second.meshCount > 0) {
-                    ModelTweak& tweak = globalTweaks[baseName];
-                    float rad = e.stateValue * DEG2RAD; float cosR = cos(rad); float sinR = sin(rad);
-                    Vector3 rotatedOffset = { tweak.offset.x * cosR + tweak.offset.z * sinR, tweak.offset.y, -tweak.offset.x * sinR + tweak.offset.z * cosR };
-                    Vector3 pos3D = Vector3Add(e.position, rotatedOffset); Vector3 vScale = {tweak.scale, tweak.scale, tweak.scale};
-                    DrawModelEx(modIt->second, pos3D, {0, 1, 0}, e.stateValue + tweak.rot, vScale, WHITE);
-                } else {
-                    std::vector<BoundingBox> projected = e.GetWorldBounds();
-                    for(const auto& b : projected) {
-                        Vector3 size = { b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z };
-                        if(size.x > 0 && size.y > 0 && size.z > 0) {
-                            Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
-                            DrawCubeV(center, size, Fade(e.color, 0.8f)); DrawCubeWiresV(center, size, BLACK);
-                        }
-                    }
-                }
+        // --- MASSIVE COMBINED 3D WORLD LOOP ---
+        Entity& player = entities[0];
+        bool playerJumpedThisFrame = false; 
+        bool triggerShiftStart = false;
 
-                if (std::find(selectedIndices.begin(), selectedIndices.end(), i) != selectedIndices.end()) {
-                    std::vector<BoundingBox> projected = e.GetWorldBounds();
-                    for(const auto& b : projected) {
-                        Vector3 size = { b.max.x - b.min.x + 2.0f, b.max.y - b.min.y + 2.0f, b.max.z - b.min.z + 2.0f };
-                        Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
-                        DrawCubeWiresV(center, size, GREEN);
-                    }
-                }
-            }
-
-            if (pendingSpawnIdx != -1) {
-                Vector3 snapHit = { Snap(groundHit.x, SNAP_GRID), 0.0f, Snap(groundHit.z, SNAP_GRID) };
-                auto modIt = models.find(spawnList[pendingSpawnIdx].modelName);
-                std::string baseName = GetBaseModelName(spawnList[pendingSpawnIdx].modelName);
-                // NEW: Added meshCount > 0 safety check here too!
-                if (modIt != models.end() && modIt->second.meshCount > 0) DrawModelEx(modIt->second, snapHit, {0, 1, 0}, pendingRot, {globalTweaks[baseName].scale, globalTweaks[baseName].scale, globalTweaks[baseName].scale}, Fade(WHITE, 0.6f));
-                else { DrawCube(snapHit, 40, 40, 40, Fade(spawnList[pendingSpawnIdx].color, 0.6f)); }
-            }
-            EndMode3D();
-
-            DrawRectangle(0, 0, UI_WIDTH, GetScreenHeight(), {20, 20, 25, 240}); DrawRectangleLines(UI_WIDTH, 0, 2, GetScreenHeight(), WHITE);
-            DrawText("LEVEL EDITOR", 20, 20, 40, WHITE); DrawText("1: HITBOX MODE", 20, 80, 20, YELLOW);
-            DrawText("Shift+Click: Multi | C: Color Cycle", 20, 120, 15, LIGHTGRAY);
-            DrawText("Ctrl+C/V: Copy/Paste | Ctrl+Z: Undo", 20, 145, 15, LIGHTGRAY);
-            DrawText("5: EXPORT MAP", 20, 175, 30, GREEN);
-
-            BeginScissorMode(0, 220, UI_WIDTH, GetScreenHeight() - 220);
-            float btnY = 230.0f + spawnScrollY;
-            for (size_t i = 0; i < spawnList.size(); ++i) {
-                Rectangle btn = { 20, btnY, (float)UI_WIDTH - 40, 100 }; 
-                if (btnY > -100 && btnY < GetScreenHeight()) { // Draw if partially visible
-                    Color btnColor = {40, 40, 50, 255};
-                    if (pendingSpawnIdx == i) btnColor = {80, 80, 90, 255}; 
-                    else if (CheckCollisionPointRec(mousePos, btn)) {
-                        btnColor = {60, 60, 70, 255};
-                        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { pendingSpawnIdx = i; pendingRot = 0.0f; }
-                    }
-                    DrawRectangleRec(btn, btnColor); DrawRectangleLinesEx(btn, 2, BLACK);
-                    
-                    BeginScissorMode(btn.x, btn.y, btn.width, btn.height);
-                    BeginMode3D(iconCam);
-                    auto modIt = models.find(spawnList[i].modelName);
-                    
-                    if (modIt != models.end() && modIt->second.meshCount > 0) {
-                        DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
-                    } else { 
-                        // --- NEW: UI PLACEHOLDER SIZES ---
-                        Vector3 phSize = {60, 60, 60}; // Default Cube
-                        if (spawnList[i].modelName == "Handbook" || spawnList[i].modelName.find("Brochure") != std::string::npos) {
-                            phSize = {40, 10, 50}; // Flat Book UI
-                        } else if (spawnList[i].modelName == "PandoraBox") {
-                            phSize = {70, 50, 70}; // Wide Box UI
-                        }
-                        DrawCube({0,50,0}, phSize.x, phSize.y, phSize.z, spawnList[i].color); 
-                        DrawCubeWires({0,50,0}, phSize.x, phSize.y, phSize.z, BLACK); 
-                    }
-                    
-                    EndMode3D(); EndScissorMode();
-                    DrawText(spawnList[i].name.c_str(), btn.x + 15, btn.y + 15, 20, RAYWHITE);
-                }
-                btnY += 110.0f;
-            }
-            EndScissorMode();
+        // --- TIME & PHYSICS ARE PAUSED IF OVERLAY IS OPEN ---
+        HazardVisuals hazVis;
+        if (!isOverlayActive) {
             
-        } else {
-            std::string activeType = uniqueTypes[currentPropIdx];
-            std::vector<BoundingBox>& boxes = globalHitboxes[activeType];
-            ModelTweak& tweak = globalTweaks[activeType];
-
-            if (currentBoxIdx >= boxes.size()) currentBoxIdx = 0;
-
-            Camera3D hitCam = { 0 };
-            hitCam.position.x = cos(hitCamAngle * DEG2RAD) * hitCamDist; hitCam.position.z = sin(hitCamAngle * DEG2RAD) * hitCamDist; hitCam.position.y = hitCamHeight;
-            hitCam.target = {0.0f, 50.0f, 0.0f}; hitCam.up = {0.0f, 1.0f, 0.0f}; hitCam.fovy = 45.0f; hitCam.projection = CAMERA_PERSPECTIVE;
-
-            BeginMode3D(hitCam); DrawGrid(10, 50.0f);
-            auto modIt = models.find(activeType); Vector3 vScale = {tweak.scale, tweak.scale, tweak.scale};
-            if (modIt != models.end() && modIt->second.meshCount > 0) DrawModelEx(modIt->second, tweak.offset, {0,1,0}, tweak.rot, vScale, WHITE); else DrawCube(tweak.offset, 40, 40, 40, GRAY);
-            for (size_t i = 0; i < boxes.size(); ++i) {
-                Vector3 size = { boxes[i].max.x - boxes[i].min.x, boxes[i].max.y - boxes[i].min.y, boxes[i].max.z - boxes[i].min.z };
-                Vector3 center = { boxes[i].min.x + size.x/2.0f, boxes[i].min.y + size.y/2.0f, boxes[i].min.z + size.z/2.0f };
-                DrawCubeWiresV(center, size, (i == currentBoxIdx) ? GREEN : DARKGRAY); if (i == currentBoxIdx) DrawCubeV(center, size, {0, 255, 0, 40});
+            if (currentState == STATE_PLAYING) {
+                shiftTimer += dt;
+                if (shiftTimer >= SHIFT_DURATION) {
+                    lastReport = EvaluateMuseum(entities);
+                    if (lastReport.isFired) { currentState = STATE_GAMEOVER_FIRED; PlayMusicStream(newsMusic); } 
+                    else { currentNight++; currentState = STATE_REVIEW; PlayMusicStream(reviewsMusic); }
+                }
             }
-            EndMode3D();
 
-            DrawRectangle(0, 0, UI_WIDTH + 100, GetScreenHeight(), {20, 20, 25, 240});
-            DrawText("HITBOX EDITOR", 20, 20, 40, WHITE); DrawText("1: RETURN", 20, 80, 25, YELLOW); DrawText("4: EXPORT", 20, 115, 25, GREEN);
-            DrawText("Right Click + Drag: Orbit", 20, 150, 20, LIGHTGRAY);
+            bool isSprinting = IsKeyDown(KEY_LEFT_SHIFT);
+            bool executeAction = false;
+            int actionTargetIdx = -1;
 
-            DrawText("Select Prop:", 20, 200, 30, WHITE);
-            if (DoButton({20, 240, 60, 50}, "<")) { currentPropIdx--; if(currentPropIdx < 0) currentPropIdx = uniqueTypes.size()-1; currentBoxIdx = 0; }
-            DrawText(activeType.c_str(), 100, 250, 35, SKYBLUE);
-            if (DoButton({UI_WIDTH + 20, 240, 60, 50}, ">")) { currentPropIdx++; if(currentPropIdx >= uniqueTypes.size()) currentPropIdx = 0; currentBoxIdx = 0; }
+            // Debug keys and interaction are ONLY active during gameplay
+            if (currentState == STATE_PLAYING || currentState == STATE_TUTORIAL) {
+                if (IsKeyPressed(KEY_I)) { for (auto& e : entities) if (e.HasTag(TAG_MEDUSA)) e.isGlitching = !e.isGlitching; }
+                if (IsKeyPressed(KEY_O)) { for (auto& e : entities) if (e.HasTag(TAG_WATER_SOURCE)) e.isGlitching = !e.isGlitching; }
+                if (IsKeyPressed(KEY_P)) { for (auto& e : entities) if (e.HasTag(TAG_SANDALS)) e.isGlitching = true; }
+                if (IsKeyPressed(KEY_K)) { for (auto& e : entities) if (e.HasTag(TAG_WIND_BAG)) e.isGlitching = !e.isGlitching; }
+                if (IsKeyPressed(KEY_L)) { for (auto& e : entities) if (e.HasTag(TAG_BOULDER)) e.isGlitching = !e.isGlitching; }
+                if (IsKeyPressed(KEY_SIX)) { shiftTimer = SHIFT_DURATION; } 
+                
+                for(auto& e : entities) {
+                    if (e.HasTag(TAG_DOOR_1)) { e.isSolid = !doorsOpen[0]; e.color.a = doorsOpen[0] ? 30 : 255; }
+                    if (e.HasTag(TAG_DOOR_2)) { e.isSolid = !doorsOpen[1]; e.color.a = doorsOpen[1] ? 30 : 255; }
+                    if (e.HasTag(TAG_DOOR_3)) { e.isSolid = !doorsOpen[2]; e.color.a = doorsOpen[2] ? 30 : 255; }
+                    if (e.HasTag(TAG_DOOR_5)) { e.isSolid = !doorsOpen[3]; e.color.a = doorsOpen[3] ? 30 : 255; }
+                    if (e.HasTag(TAG_DOOR_4)) { e.isSolid = !doorsOpen[4]; e.color.a = doorsOpen[4] ? 30 : 255; }
+                }
+                
+                if (showInteractMenu) {
+                    if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) interactSelectedIndex = (interactSelectedIndex - 1 + interactTargets.size()) % interactTargets.size();
+                    if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) interactSelectedIndex = (interactSelectedIndex + 1) % interactTargets.size();
+                    bool clicked = false;
+                    Vector2 mousePos = GetMousePosition();
+                    float menuW = 400; float itemH = 50; float menuH = 60 + interactTargets.size() * itemH;
+                    float menuX = GetScreenWidth() / 2.0f - menuW / 2.0f; float menuY = GetScreenHeight() / 2.0f - menuH / 2.0f;
 
-            float py = 320.0f;
-            DrawText("Hitboxes:", 20, py, 25, GRAY); py+=40;
-            if (DoButton({20, py, 50, 40}, "<")) { currentBoxIdx--; if(currentBoxIdx < 0) currentBoxIdx = boxes.size()-1; }
-            DrawText(TextFormat("Box %d of %d", currentBoxIdx + 1, boxes.size()), 90, py+5, 25, WHITE);
-            if (DoButton({250, py, 50, 40}, ">")) { currentBoxIdx++; if(currentBoxIdx >= boxes.size()) currentBoxIdx = 0; }
-            if (DoButton({320, py, 80, 40}, "[+] Box")) { boxes.push_back({{-10,0,-10}, {10,20,10}}); currentBoxIdx = boxes.size()-1; }
-            if (boxes.size() > 1 && DoButton({420, py, 80, 40}, "[-] Box")) { boxes.erase(boxes.begin() + currentBoxIdx); currentBoxIdx = 0; }
-            py+=60;
+                    for (size_t i = 0; i < interactTargets.size(); ++i) {
+                        if (CheckCollisionPointRec(mousePos, { menuX + 20, menuY + 60 + i * itemH, menuW - 40, itemH - 10 })) {
+                            if (Vector2Length(GetMouseDelta()) > 0.1f) interactSelectedIndex = i; 
+                            if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
+                        }
+                    }
+                    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || clicked) {
+                        executeAction = true; actionTargetIdx = interactTargets[interactSelectedIndex]; showInteractMenu = false;
+                    }
+                    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) showInteractMenu = false;
+                } 
+            }
 
-            BoundingBox& b = boxes[currentBoxIdx];
-            DrawText("Adjust Min:", 20, py, 25, GRAY); py+=40;
-            DrawText(TextFormat("Min X: %.1f", b.min.x), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.min.x -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.min.x += 5.0f; py+=50;
-            DrawText(TextFormat("Min Y: %.1f", b.min.y), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.min.y -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.min.y += 5.0f; py+=50;
-            DrawText(TextFormat("Min Z: %.1f", b.min.z), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.min.z -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.min.z += 5.0f; py+=70;
+            // Universal Movement works in ALL states (Lobby included!)
+            if (!showInteractMenu && !player.isStone && !player.isDead) {
+                Vector3 input = { 0.0f, 0.0f, 0.0f };
+                float baseAccel = 6000.0f; 
+                float maxSpeed = isSprinting ? 1200.0f : 300.0f; 
+                float currentAccel = isSprinting ? baseAccel * 1.5f : baseAccel;
 
-            DrawText("Adjust Max:", 20, py, 25, GRAY); py+=40;
-            DrawText(TextFormat("Max X: %.1f", b.max.x), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.max.x -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.max.x += 5.0f; py+=50;
-            DrawText(TextFormat("Max Y: %.1f", b.max.y), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.max.y -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.max.y += 5.0f; py+=50;
-            DrawText(TextFormat("Max Z: %.1f", b.max.z), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) b.max.z -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) b.max.z += 5.0f; py+=70;
+                if (grabbedEntityIndex != -1 && entities[grabbedEntityIndex].HasTag(TAG_HEAVY)) { currentAccel = 3000.0f; maxSpeed = 200.0f; }
 
-            DrawText("Tweaks (Scale/Offset):", 20, py, 25, GRAY); py+=40;
-            DrawText(TextFormat("Scale: %.1f", tweak.scale), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.scale -= 5.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.scale += 5.0f; py+=50;
-            DrawText(TextFormat("Offset X: %.1f", tweak.offset.x), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.offset.x -= 2.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.offset.x += 2.0f; py+=50;
-            DrawText(TextFormat("Offset Y: %.1f", tweak.offset.y), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.offset.y -= 2.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.offset.y += 2.0f; py+=50;
-            DrawText(TextFormat("Offset Z: %.1f", tweak.offset.z), 20, py, 30, WHITE); if (DoButton({260, py, 50, 40}, "-")) tweak.offset.z -= 2.0f; if (DoButton({330, py, 50, 40}, "+")) tweak.offset.z += 2.0f; py+=50;
+                if (IsKeyDown(KEY_W)) input.z -= 1.0f; if (IsKeyDown(KEY_S)) input.z += 1.0f;
+                if (IsKeyDown(KEY_A)) input.x -= 1.0f; if (IsKeyDown(KEY_D)) input.x += 1.0f;
+                
+                if (Vector3Length(input) > 0.0f) {
+                    input = Vector3Normalize(input); player.facingDir = input;
+                    player.velocity.x += input.x * currentAccel * dt; 
+                    player.velocity.z += input.z * currentAccel * dt;
+                    player.stateValue = atan2(player.facingDir.x, player.facingDir.z) * RAD2DEG;
+                }
+
+                Vector2 horizVel = { player.velocity.x, player.velocity.z };
+                if (Vector2Length(horizVel) > maxSpeed) {
+                    horizVel = Vector2Scale(Vector2Normalize(horizVel), maxSpeed);
+                    player.velocity.x = horizVel.x; player.velocity.z = horizVel.y;
+                }
+
+                // JUMP LOGIC (Fails if holding item)
+                if (IsKeyPressed(KEY_SPACE) && player.velocity.y == 0.0f && grabbedEntityIndex == -1) {
+                    player.velocity.y = 800.0f; 
+                    playerJumpedThisFrame = true;
+                }
+                
+                if (grabbedEntityIndex != -1) entities[grabbedEntityIndex].isUsing = IsKeyDown(KEY_F);
+
+                if (IsKeyPressed(KEY_F)) {
+                    bool environmentF = false;
+
+                    // OVERLAY TRIGGER
+                    if (grabbedEntityIndex != -1 && entities[grabbedEntityIndex].HasTag(TAG_HANDBOOK)) {
+                        isOverlayActive = true;
+                        PauseMusicStream(tutorialMusic);
+                        PlayMusicStream(newsMusic); 
+                        environmentF = true;
+                    }
+
+                    if (!environmentF) {
+                        std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
+                        for (auto& b : pIntBoxList) {
+                            float reach = 60.0f; b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach;
+                            b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach;
+                            b.min.x -= 50; b.max.x += 50; b.min.z -= 50; b.max.z += 50; b.min.y -= 20; b.max.y += 120; 
+                        }
+                        
+                        for (auto& e : entities) {
+                            if ((e.HasTag(TAG_FUSEBOX) || e.HasTag(TAG_LIGHTSWITCH)) && CheckCollisionLists(pIntBoxList, e.GetWorldInteractBounds())) {
+                                e.stateValue = (e.stateValue > 0.5f) ? 0.0f : 1.0f; environmentF = true; break;
+                            }
+                        }
+                        if (!environmentF && grabbedEntityIndex != -1) {
+                            for (size_t i = 1; i < entities.size(); ++i) {
+                                if (i != grabbedEntityIndex && CheckCollisionLists(pIntBoxList, entities[i].GetWorldInteractBounds())) {
+                                    ChemResult res = ProcessChemistry(grabbedEntityIndex, i, entities);
+                                    if (res != CHEM_NONE) {
+                                        environmentF = true;
+                                        if (res == CHEM_ATTACHED) { entities[grabbedEntityIndex].isGrabbed = false; grabbedEntityIndex = -1; }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (!environmentF) {
+                            if (grabbedEntityIndex != -1) {
+                                if (entities[grabbedEntityIndex].HasTag(TAG_EYEWEAR) && !entities[grabbedEntityIndex].HasTag(TAG_BROKEN)) { equippedEyewear = grabbedEntityIndex; entities[grabbedEntityIndex].isGrabbed = false; grabbedEntityIndex = -1; }
+                                else if (entities[grabbedEntityIndex].HasTag(TAG_GLOVES)) { equippedGloves = grabbedEntityIndex; entities[grabbedEntityIndex].isGrabbed = false; grabbedEntityIndex = -1; }
+                            } else {
+                                if (equippedGloves != -1) { grabbedEntityIndex = equippedGloves; entities[equippedGloves].isGrabbed = true; equippedGloves = -1; }
+                                else if (equippedEyewear != -1) { grabbedEntityIndex = equippedEyewear; entities[equippedEyewear].isGrabbed = true; equippedEyewear = -1; }
+                            }
+                        }
+                    }
+                }
+                
+                if (IsKeyPressed(KEY_F) && grabbedEntityIndex != -1 && !isOverlayActive) {
+                    Entity& held = entities[grabbedEntityIndex];
+                    if (held.HasTag(TAG_HOLE_SAW)) {
+                        BoundingBox holeBox = {{-30, 0, -30}, {30, 5, 30}};
+                        Entity hole = MakeProp("Floor Hole", {player.position.x + player.facingDir.x * 70.0f, 0.0f, player.position.z + player.facingDir.z * 70.0f}, holeBox, BLACK, {TAG_HOLE});
+                        hole.isSolid = false; hole.canGrab = false; entities.push_back(hole);
+                    }
+                    if (held.HasTag(TAG_BUBBLE_WRAP) && held.stateValue > 0) {
+                        held.stateValue -= 1.0f; BoundingBox matBox = {{-50, 0, -50}, {50, 5, 50}};
+                        Entity mat = MakeProp("Bubble Mat", player.position, matBox, SKYBLUE, {TAG_MAT});
+                        mat.isSolid = false; mat.canGrab = false; entities.push_back(mat);
+                    }
+                    if (held.HasTag(TAG_TAPE) && held.stateValue > 0) {
+                        for (auto& target : entities) {
+                            if (target.HasTag(TAG_WIND_BAG) && Vector3Distance(player.position, target.position) < 80.0f) { target.AddTag(TAG_BROKEN); target.isGlitching = false; held.stateValue -= 1.0f; }
+                            if (target.HasTag(TAG_MUMMY) && target.isGlitching && Vector3Distance(player.position, target.position) < 80.0f) { target.AddTag(TAG_BROKEN); target.isGlitching = false; target.velocity = {0, 0, 0}; target.color = LIGHTGRAY; held.stateValue -= 1.0f; }
+                        }
+                    }
+                }
+                
+                if (IsKeyPressed(KEY_E)) {
+                    interactTargets.clear();
+                    if (grabbedEntityIndex != -1) {
+                        Entity& item = entities[grabbedEntityIndex];
+                        Vector3 dropPos = { player.position.x + player.facingDir.x * 70.0f, player.position.y + 100.0f, player.position.z + player.facingDir.z * 70.0f };
+                        std::vector<BoundingBox> dropBoxList = item.boundsList; 
+                        for (auto& b : dropBoxList) { b.min.x += dropPos.x; b.max.x += dropPos.x; b.min.y += dropPos.y; b.max.y += dropPos.y; b.min.z += dropPos.z; b.max.z += dropPos.z; }
+                        
+                        for(size_t i = 0; i < entities.size(); ++i) {
+                            if(i != grabbedEntityIndex && CheckCollisionLists(dropBoxList, entities[i].GetWorldInteractBounds())) {
+                                if (entities[i].name == "stand2" || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { interactTargets.push_back(i); } 
+                                else if (CanProcessChemistry(grabbedEntityIndex, i, entities) != CHEM_NONE) { interactTargets.push_back(i); }
+                            }
+                        }
+
+                        if (interactTargets.empty()) {
+                            float targetY = 0.0f;
+                            for(size_t i = 0; i < entities.size(); ++i) {
+                                if(i != grabbedEntityIndex && entities[i].isSolid && CheckCollisionLists(dropBoxList, entities[i].GetWorldBounds())) {
+                                    for (const auto& b : entities[i].GetWorldBounds()) { if (b.max.y > targetY) targetY = b.max.y; }
+                                }
+                            }
+                            item.position = dropPos; item.position.y = targetY; 
+                            if (item.HasTag(TAG_SANDALS)) item.stateTimer = 4.0f;
+                            item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1;
+                        } else if (interactTargets.size() == 1) { executeAction = true; actionTargetIdx = interactTargets[0]; isDropMenu = true; } 
+                        else { showInteractMenu = true; isDropMenu = true; interactSelectedIndex = 0; }
+                    } else {
+                        std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
+                        for (auto& b : pIntBoxList) { float reach = 60.0f; b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach; b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach; b.min.x -= 50; b.max.x += 50; b.min.z -= 50; b.max.z += 50; b.min.y -= 20; b.max.y += 120; }
+                        for (size_t i = 1; i < entities.size(); ++i) {
+                            if (i == equippedEyewear || i == equippedGloves) continue; 
+                            if (!entities[i].isGrabbed && entities[i].canGrab && CheckCollisionLists(pIntBoxList, entities[i].GetWorldInteractBounds())) interactTargets.push_back(i);
+                        }
+                        std::sort(interactTargets.begin(), interactTargets.end(), [&](int a, int b) { return Vector3Distance(player.position, entities[a].position) < Vector3Distance(player.position, entities[b].position); });
+
+                        if (interactTargets.size() == 1) { executeAction = true; actionTargetIdx = interactTargets[0]; isDropMenu = false; } 
+                        else if (interactTargets.size() > 1) { showInteractMenu = true; isDropMenu = false; interactSelectedIndex = 0; }
+                    }
+                }
+
+                if (IsKeyPressed(KEY_SPACE) && grabbedEntityIndex != -1 && entities[grabbedEntityIndex].canThrow) {
+                    Entity& held = entities[grabbedEntityIndex];
+                    held.isGrabbed = false; held.isUsing = false; 
+                    float throwStrength = 2200.0f; float upwardArc = 800.0f;    
+                    held.velocity = Vector3Scale(player.facingDir, throwStrength); held.velocity.y = upwardArc; 
+                    if (held.HasTag(TAG_SANDALS)) held.isGlitching = true;
+                    grabbedEntityIndex = -1;
+                }
+            }
+
+            if (executeAction) {
+                if (!isDropMenu) {
+                    grabbedEntityIndex = actionTargetIdx; entities[grabbedEntityIndex].isGrabbed = true; entities[grabbedEntityIndex].attachedTo = -1;
+                } else {
+                    Entity& item = entities[grabbedEntityIndex];
+                    ChemResult res = ProcessChemistry(grabbedEntityIndex, actionTargetIdx, entities);
+                    if (res != CHEM_NONE) { if (res == CHEM_ATTACHED) { item.attachedTo = actionTargetIdx; item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1; } } 
+                    else { item.attachedTo = actionTargetIdx; item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1; }
+                }
+            }
+
+            int targetAnimState = 0; 
+            float speed = Vector2Length({player.velocity.x, player.velocity.z});
+            if (abs(player.velocity.y) > 5.0f) targetAnimState = 3; 
+            else if (speed > 20.0f) targetAnimState = isSprinting ? 2 : 1; 
+            else if (IsKeyDown(KEY_F) || IsKeyDown(KEY_E)) targetAnimState = 4; 
+
+            if (currentAnimState != targetAnimState) { currentAnimState = targetAnimState; animTimer = 0.0f; }
+
+            int activeIdx = idxIdle;
+            if (currentAnimState == 1) activeIdx = idxWalk;
+            else if (currentAnimState == 2) activeIdx = idxRun;
+            else if (currentAnimState == 3) activeIdx = idxRoll;
+            else if (currentAnimState == 4) activeIdx = idxInteract;
+
+            if (anims != nullptr && activeIdx < animCount) {
+                float playbackSpeed = 45.0f; 
+                if (currentAnimState == 2) playbackSpeed = 60.0f; 
+                if (currentAnimState == 1) playbackSpeed = 50.0f; 
+                if (currentAnimState == 3) playbackSpeed = 90.0f; 
+
+                animTimer += dt * playbackSpeed; 
+                animTimer = fmod(animTimer, (float)anims[activeIdx].keyframeCount); 
+                UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
+            }
+
+            hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves, currentNight, shiftTimer);
+            
+            if (currentState == STATE_PLAYING || currentState == STATE_TUTORIAL) {
+                if (player.isStone || player.isDead) {
+                    lastReport = EvaluateMuseum(entities); 
+                    currentState = STATE_GAMEOVER_DEATH;
+                    PlayMusicStream(deathMusic); 
+                }
+            }
+        } // END !isOverlayActive PAUSE BLOCK
+
+        RenderWorld(renderTarget, camera, dt, entities, player, grabbedEntityIndex, hazVis, models);
+        
+        // --- 3. UNIFIED UI RENDERING ---
+        // ONE BeginDrawing() block to rule them all!
+        BeginDrawing(); 
+        ClearBackground(BLACK);
+        float scale = std::min((float)GetScreenWidth() / GAME_WIDTH, (float)GetScreenHeight() / GAME_HEIGHT);
+        Rectangle sourceRec = { 0.0f, 0.0f, (float)renderTarget.texture.width, (float)-renderTarget.texture.height };
+        Rectangle destRec = { (GetScreenWidth() - ((float)GAME_WIDTH * scale)) * 0.5f, (GetScreenHeight() - ((float)GAME_HEIGHT * scale)) * 0.5f, (float)GAME_WIDTH * scale, (float)GAME_HEIGHT * scale };
+        DrawTexturePro(renderTarget.texture, sourceRec, destRec, { 0, 0 }, 0.0f, WHITE);
+
+        if (currentState == STATE_MENU || currentState == STATE_OPTIONS) {
+            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart);
+            SetMusicVolume(mainMusic, mainMusicVolume); SetMusicVolume(tutorialMusic, mainMusicVolume);
+        } else {
+            // RenderHUD now correctly draws transparently over the 3D target
+            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities);
+            
+            if (currentState == STATE_TUTORIAL && !isOverlayActive) {
+                bool tutorialFinished = false;
+                UpdateAndRenderTutorial((int&)currentState, entities, grabbedEntityIndex, shiftTimer, tutorialFinished, tutorialStep, playerJumpedThisFrame);
+                if (tutorialFinished) { doorsOpen[0] = true; StopMusicStream(tutorialMusic); PlayMusicStream(mainMusic); }
+            }
+
+            if (isOverlayActive) {
+                UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep); 
+            }
         }
         EndDrawing();
+        // Safe transition trigger handled AFTER physics logic
+        if (triggerShiftStart) {
+            StopMusicStream(tutorialMusic);
+            ResetNight(); 
+            if (currentNight == 1) { currentState = STATE_TUTORIAL; PlayMusicStream(tutorialMusic); } 
+            else { currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
+            continue; 
+        }
     }
-    for (auto& pair : models) UnloadModel(pair.second);
-    CloseWindow(); return 0;
+
+    if (anims) UnloadModelAnimations(anims, animCount);
+    for (auto& pair : models) { UnloadModel(pair.second); }
+
+    if (isMainMusicLoaded) UnloadMusicStream(mainMusic);
+    UnloadMusicStream(tutorialMusic); UnloadMusicStream(deathMusic); UnloadMusicStream(newsMusic); UnloadMusicStream(reviewsMusic); CloseAudioDevice();
+    UnloadRenderTexture(renderTarget); CloseWindow(); 
+    return 0;
 }
