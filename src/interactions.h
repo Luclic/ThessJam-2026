@@ -72,12 +72,44 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Giant Cork") { e.AddTag(TAG_CORK); e.canGrab = true; e.name = "Cork"; }
         
         // --- SIGNS (Legal Excuses) ---
-        else if (e.name == "Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = true; e.name = "sign1"; }
-        else if (e.name == "Sign 2") { e.AddTag(TAG_WET_SIGN); e.canGrab = true; e.name = "sign2"; }
-        else if (e.name == "Sign 3") { e.AddTag(TAG_WET_SIGN); e.canGrab = true; e.name = "sign3"; }
-        else if (e.name == "Artifact Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = true; e.name = "artifactsign1"; }
-        else if (e.name == "Artifact Sign 2") { e.AddTag(TAG_WET_SIGN); e.canGrab = true; e.name = "artifactsign2"; }
-    }
+        else if (e.name == "Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "sign1"; }
+        else if (e.name == "Sign 2") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "sign2"; }
+        else if (e.name == "Sign 3") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "sign3"; }
+        else if (e.name == "Artifact Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "artifactsign1"; }
+        else if (e.name == "Artifact Sign 2") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "artifactsign2"; }
+    
+        // --- READABLES ---
+        else if (e.name == "Employee Handbook" || e.name == "Handbook") { 
+            e.AddTag(TAG_HANDBOOK); 
+            e.canGrab = true; 
+            
+            // Bulletproof fallback for the thin book shape
+            if (e.boundsList.empty()) {
+                e.boundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
+                e.interactBoundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
+            }
+        }
+        else if (e.name.find("Brochure") != std::string::npos) { 
+            e.AddTag(TAG_HANDBOOK); 
+            e.canGrab = true; 
+            
+            // Bulletproof fallback for the thin book shape
+            if (e.boundsList.empty()) {
+                e.boundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
+                e.interactBoundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
+            }
+        }        // --- BOSS ROOM ---
+        else if (e.name == "Pandora's Box" || e.name == "PandoraBox") { 
+            e.AddTag(TAG_PANDORA); 
+            e.canGrab = false; 
+            e.isSolid = true; 
+            
+            // Bulletproof fallback if hitbox export is missing
+            if (e.boundsList.empty()) {
+                e.boundsList.push_back({{-30, 0, -30}, {30, 40, 30}});
+                e.interactBoundsList.push_back({{-30, 0, -30}, {30, 40, 30}});
+            }
+        }    }
 }
 
 // --- 2. IMPACT LOGIC ---
