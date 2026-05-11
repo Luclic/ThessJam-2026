@@ -15,7 +15,7 @@ enum Tag {
     TAG_WET_SIGN, TAG_BOULDER,
     TAG_LIGHTSWITCH, TAG_SUN_DISK, TAG_MUMMY, TAG_SARCOPHAGUS, TAG_SPHINX, TAG_SPHINX_NOSE,
     TAG_MJOLNIR, TAG_GLEIPNIR, TAG_BANSHEE_STONE, TAG_BUBBLE_WRAP,
-    TAG_HOLE_SAW, TAG_HOLE, TAG_FLASHLIGHT, TAG_MAT, TAG_HEAT_SOURCE // Phase 15 Tags
+    TAG_HOLE_SAW, TAG_HOLE, TAG_FLASHLIGHT, TAG_MAT, TAG_HEAT_SOURCE, TAG_LIGHTNING, TAG_PANDORA, TAG_HANDBOOK
 };
 
 struct Entity {
@@ -163,3 +163,4 @@ inline std::string GetNextStyle(const std::string& name) {
     if (name == "floor12") return "floor22"; if (name == "floor22") return "floor32"; if (name == "floor32") return "floor42"; if (name == "floor42") return "floor12";
     return name; // Return unchanged if not a variant object
 }
+

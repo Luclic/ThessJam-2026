@@ -2,13 +2,17 @@
 #include "Entities.h"
 #include <vector>
 
-
 enum ChemResult { CHEM_NONE, CHEM_ATTACHED, CHEM_USED_BUT_KEPT, CHEM_FIXED };
 
 inline void AssignEntityRules(std::vector<Entity>& entities) {
     for (auto& e : entities) {
         // Quality of Life: Items on the floor are not solid so we don't trip on them
         if (e.canGrab) e.isSolid = false; 
+
+        else if (e.name == "Employee Handbook" || e.name == "Handbook") { 
+            e.AddTag(TAG_HANDBOOK); 
+            e.canGrab = true; 
+        }
 
         // --- DOORS ---
         if (e.name == "Door 1 (Greek 1)") { e.AddTag(TAG_DOOR_1); e.name = "wall4"; }
@@ -19,27 +23,32 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
 
         // --- NORDIC ROOM ---
         else if (e.name == "Mjolnir") { e.AddTag(TAG_MJOLNIR); e.AddTag(TAG_HEAVY); e.canGrab = false; e.name = "mjolner"; }
-        else if (e.name == "Sandal") { e.AddTag(TAG_SANDALS); e.canGrab = true; e.canThrow = true; } // Name already matches
+        else if (e.name == "Sandal") { e.AddTag(TAG_SANDALS); e.canGrab = true; e.canThrow = true; } 
         else if (e.name == "Banshee Stone") { e.AddTag(TAG_BANSHEE_STONE); e.canGrab = true; e.canThrow = true; e.name = "rocks"; }
-        else if (e.name == "Gleipnir Ribbon") { e.AddTag(TAG_GLEIPNIR); e.name = "Gleipnir"; } // Placeholder
+        else if (e.name == "Gleipnir Ribbon") { e.AddTag(TAG_GLEIPNIR); e.name = "Gleipnir"; } 
 
         // --- EGYPTIAN ROOM ---
         else if (e.name == "Sun Disk") { e.AddTag(TAG_SUN_DISK); e.AddTag(TAG_HEAT_SOURCE); e.canGrab = false; e.name = "Coin"; }
         else if (e.name == "Anubis") { e.AddTag(TAG_MUMMY); e.name = "Anubis Statue"; }
-        else if (e.name == "Mummy") { e.AddTag(TAG_MUMMY); } // Placeholder
-        else if (e.name == "Sphinx") { e.AddTag(TAG_SPHINX); } // Placeholder
-        else if (e.name == "Sphinx Nose") { e.AddTag(TAG_SPHINX_NOSE); e.canGrab = true; } // Placeholder
+        else if (e.name == "Mummy") { e.AddTag(TAG_MUMMY); } 
+        else if (e.name == "Sphinx") { e.AddTag(TAG_SPHINX); } 
+        else if (e.name == "Sphinx Nose") { e.AddTag(TAG_SPHINX_NOSE); e.canGrab = true; } 
 
         // --- GREEK ROOM ---
-        else if (e.name == "Medusa") { e.AddTag(TAG_MEDUSA); } // Placeholder
-        else if (e.name == "Zeus Statue") { e.AddTag(TAG_ZEUS); e.AddTag(TAG_ELECTRIC); } // Placeholder
+        else if (e.name == "Medusa") { e.AddTag(TAG_MEDUSA); } 
+        else if (e.name == "Zeus Statue") { e.AddTag(TAG_ZEUS); e.isStatic = true; e.canGrab = false; e.isSolid = true; } 
+        
+        // TIMELINE FIX: Lightning is inert. TAG_ELECTRIC is injected on Night 3+ inside SetupNightHazards!
+        else if (e.name == "Lightning Bolt") { e.AddTag(TAG_LIGHTNING); e.canGrab = false; } 
+        
         else if (e.name == "Display Vase") { e.AddTag(TAG_FRAGILE); e.canGrab = true; e.canThrow = true; e.name = "Tall Vase"; }
-        else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = true; e.canThrow = true; } // Water leak trigger!
+        else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = true; e.canThrow = true; } 
         else if (e.name == "Sisyphus Boulder") { e.AddTag(TAG_BOULDER); e.AddTag(TAG_HEAVY); e.name = "Rock"; }
         else if (e.name == "Aeolus Bag") { e.AddTag(TAG_WIND_BAG); e.canGrab = true; e.canThrow = true; e.name = "Coin Pouch"; }
 
         // --- TOOLS & JANITOR ARSENAL ---
-        else if (e.name == "Extinguisher") { e.AddTag(TAG_EXTINGUISHER); e.canGrab = true; e.canThrow = true; e.name = "Fire Extinguisher"; }
+        // Tutorial Trigger: Grabbing the Flashlight will end STATE_TUTORIAL in main.cpp
+        else if (e.name == "Fire Extinguisher") { e.AddTag(TAG_EXTINGUISHER); e.canGrab = true; e.canThrow = true; e.name = "Fire Extinguisher"; }
         else if (e.name == "Flashlight") { e.AddTag(TAG_FLASHLIGHT); e.canGrab = true; e.name = "Time Hotel 7.07"; }
         else if (e.name == "Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; }
         else if (e.name == "Pixel Glasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Pixel Sunglasses"; }
@@ -47,7 +56,17 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Painters Tape") { e.AddTag(TAG_TAPE); e.stateValue = 10.0f; e.canGrab = true; e.name = "Time Hotel 5.25 Painters Tape"; }
         else if (e.name == "Sponge") { e.AddTag(TAG_SPONGE); e.canGrab = true; }
         else if (e.name == "Bag") { e.AddTag(TAG_SANDBAG); e.AddTag(TAG_HEAVY); e.canGrab = true; e.name = "Bag"; }
-        else if (e.name == "Broom") { e.AddTag(TAG_MOP); e.canGrab = true; }
+        else if (e.name == "Broom" || e.name == "Mop") { 
+            e.AddTag(TAG_MOP); 
+            e.canGrab = true; 
+            
+            // Fatten the interaction box so it's impossible to miss
+            if (!e.interactBoundsList.empty()) {
+                e.interactBoundsList[0].min.x -= 30.0f; e.interactBoundsList[0].max.x += 30.0f;
+                e.interactBoundsList[0].min.z -= 30.0f; e.interactBoundsList[0].max.z += 30.0f;
+                e.interactBoundsList[0].max.y += 50.0f; // Make it taller to reach your hands
+            }
+        }
         else if (e.name == "Saw") { e.AddTag(TAG_HOLE_SAW); e.canGrab = true; }
         else if (e.name == "Cardboard Boxes") { e.AddTag(TAG_BUBBLE_WRAP); e.stateValue = 3.0f; e.canGrab = true; }
         else if (e.name == "Giant Cork") { e.AddTag(TAG_CORK); e.canGrab = true; e.name = "Cork"; }
@@ -60,6 +79,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Artifact Sign 2") { e.AddTag(TAG_WET_SIGN); e.canGrab = true; e.name = "artifactsign2"; }
     }
 }
+
 // --- 2. IMPACT LOGIC ---
 inline void ProcessImpact(Entity& e) {
     if (e.HasTag(TAG_FRAGILE) && !e.HasTag(TAG_BROKEN)) {
@@ -82,6 +102,12 @@ inline ChemResult CanProcessChemistry(int toolIdx, int targetIdx, const std::vec
     
     // New GDD Synergies
     if (tool.HasTag(TAG_EXTINGUISHER) && target.HasTag(TAG_SUN_DISK) && target.isGlitching) return CHEM_FIXED;
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_SANDALS)) return CHEM_USED_BUT_KEPT; // Tape the flying shoes
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) return CHEM_USED_BUT_KEPT;   // Wrap the mummy
+    if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WATER_SOURCE)) return CHEM_ATTACHED; // Plug the trident puddle
+    
+    // ZEUS SOCKET LOGIC: Can put Lightning OR any Petrified item into Zeus's hand
+    if (target.HasTag(TAG_ZEUS) && (tool.HasTag(TAG_LIGHTNING) || tool.isStone)) return CHEM_ATTACHED;
     
     return CHEM_NONE;
 }
@@ -120,6 +146,35 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         tool.attachedTo = targetIdx; target.isGlitching = false; return CHEM_ATTACHED;
     }
     
+    // Tape the Sandals
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_SANDALS)) {
+        tool.stateValue -= 1.0f; 
+        target.isGlitching = false; 
+        target.velocity = {0,0,0};
+        target.stateTimer = -999.0f; // Permanently prevents them from flying again!
+        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        return CHEM_USED_BUT_KEPT;
+    }
+    
+    // Tape the Mummy
+    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) {
+        tool.stateValue -= 1.0f; target.isGlitching = false; target.velocity = {0,0,0};
+        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        return CHEM_USED_BUT_KEPT;
+    }
+
+    // Cork the Water Source (Trident)
+    if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WATER_SOURCE)) {
+        tool.attachedTo = targetIdx; target.isGlitching = false; return CHEM_ATTACHED;
+    }
+
+    // Give item to Zeus
+    if (target.HasTag(TAG_ZEUS) && (tool.HasTag(TAG_LIGHTNING) || tool.isStone)) {
+        tool.attachedTo = targetIdx; 
+        tool.position = { target.position.x - 40.0f, target.position.y + 120.0f, target.position.z }; // Place in hand
+        return CHEM_ATTACHED;
+    }
+
     // Taping Broken Eyewear
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_BROKEN)) {
         tool.stateValue -= 1.0f; target.RemoveTag(TAG_BROKEN);
@@ -135,7 +190,7 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         if (!target.boundsList.empty()) target.boundsList[0].max.y += 40.0f; 
         return CHEM_ATTACHED; 
     }
-
+    
     // Cooling the Sun Disk with Extinguisher
     if (tool.HasTag(TAG_EXTINGUISHER) && target.HasTag(TAG_SUN_DISK) && target.isGlitching) {
         target.isGlitching = false;

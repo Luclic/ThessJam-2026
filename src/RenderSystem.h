@@ -30,10 +30,10 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     EndMode2D();
 
     Camera3D cam3D = { 0 };
-    cam3D.position = (Vector3){ camera.target.x + GAME_WIDTH/2.0f, 1500.0f, camera.target.y + GAME_HEIGHT/2.0f + 800.0f }; 
-    cam3D.target = (Vector3){ camera.target.x + GAME_WIDTH/2.0f, 0.0f, camera.target.y + GAME_HEIGHT/2.0f };      
+    cam3D.position = (Vector3){ (camera.target.x + 50) + GAME_WIDTH/2.0f, 1300.0f, camera.target.y + GAME_HEIGHT/2.0f + 700.0f }; 
+    cam3D.target = (Vector3){ (camera.target.x + 50) + GAME_WIDTH/2.0f, 0.0f, camera.target.y + GAME_HEIGHT/2.0f };      
     cam3D.up = (Vector3){ 0.0f, 1.0f, 0.0f }; 
-    cam3D.fovy = 45.0f; 
+    cam3D.fovy = 50.0f; 
     cam3D.projection = CAMERA_PERSPECTIVE;
 
     std::vector<std::pair<Vector2, std::string>> floatingTexts;
@@ -83,8 +83,30 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
             }
         }
 
-        //if (e->castsShadow && !e->isGrabbed && e->attachedTo == -1) DrawCylinder({e->position.x, 2.0f, e->position.z}, 25.0f, 25.0f, 0.1f, 12, {0, 0, 0, 80});
-        if (e->HasTag(TAG_WATER_SOURCE) && e->stateValue > 0.0f) DrawCylinder({e->position.x, 1.0f, e->position.z}, e->stateValue, e->stateValue, 0.1f, 16, {0, 121, 241, 150});
+        // --- NEW CONCENTRIC PUDDLE RENDERER (PERFORMANCE & VISUAL FIX) ---
+        if (e->HasTag(TAG_WATER_SOURCE) && e->stateValue > 0.0f) {
+            float radius = e->stateValue;
+            float timeSec = (float)GetTime();
+
+            // 1. Draw Concentric 2D Rings (layered slightly on Y-axis to prevent Z-fighting)
+            
+            // Outer Ring - Shallow Water (Light Blue, Highly Transparent)
+            DrawCylinder({e->position.x, 50.0f, e->position.z}, radius, radius, 0.1f, 24, {0, 150, 255, 80});
+            
+            // Middle Ring - Deepening Water (Medium Blue)
+            float midRadius = radius * 0.9f; // 70% of total size
+            if (midRadius > 0) {
+                DrawCylinder({e->position.x, 55.0f, e->position.z}, midRadius, midRadius, 0.1f, 24, {0, 100, 200, 140});
+            }
+
+            // Inner Ring - Deep Water (Dark Ocean Blue)
+            float innerRadius = radius * 0.85f; // 40% of total size
+            if (innerRadius > 0) {
+                DrawCylinder({e->position.x, 60.0f, e->position.z}, innerRadius, innerRadius, 0.1f, 24, {0, 50, 150, 200});
+            }
+        }
+        // -----------------------------------------------------------------
+
         if (e->HasTag(TAG_BANSHEE_STONE) && e->stateValue > 0.0f) DrawCylinderWires({e->position.x, e->position.y, e->position.z}, e->stateValue, e->stateValue, 1.0f, 16, {200, 100, 255, (unsigned char)(std::max(0.0f, 255.0f - (e->stateValue / 800.0f) * 255.0f))});
         
         if (e->isUsing && e->HasTag(TAG_FLASHLIGHT)) {
@@ -92,6 +114,18 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
             Vector3 fl2 = { e->position.x + dir.x * 600.0f + perp.x * 300.0f, e->position.y, e->position.z + dir.z * 600.0f + perp.z * 300.0f }; 
             Vector3 fl3 = { e->position.x + dir.x * 600.0f - perp.x * 300.0f, e->position.y, e->position.z + dir.z * 600.0f - perp.z * 300.0f };
             DrawTriangle3D(e->position, fl2, fl3, { 255, 255, 200, 100 }); DrawTriangle3D(e->position, fl3, fl2, { 255, 255, 200, 100 }); 
+        }
+
+        // Draw Tape if the Wind Bag is sealed
+        if (e->HasTag(TAG_WIND_BAG) && e->HasTag(TAG_BROKEN)) {
+            DrawCubeWiresV(e->position, {60, 20, 60}, GRAY); 
+        }
+
+        // Draw Zeus Lightning Sparks
+        if (e->HasTag(TAG_ZEUS) && e->isGlitching) {
+            if ((int)(GetTime() * 10) % 2 == 0) { // Flickers every other frame
+                DrawSphereWires({e->position.x, e->position.y + 40.0f, e->position.z}, 60.0f, 4, 4, YELLOW);
+            }
         }
     }
 
@@ -116,7 +150,6 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
 }
 
 inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float secondsPerHour, int currentNight, const Entity& player, bool showInteractMenu, bool isDropMenu, const std::vector<int>& interactTargets, int interactSelectedIndex, const std::vector<Entity>& entities) {
-    BeginDrawing(); 
     ClearBackground(BLACK);
     float scale = std::min((float)GetScreenWidth() / GAME_WIDTH, (float)GetScreenHeight() / GAME_HEIGHT);
     Rectangle sourceRec = { 0.0f, 0.0f, (float)renderTarget.texture.width, (float)-renderTarget.texture.height };
@@ -163,5 +196,4 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
         }
         DrawText("W/S: Move | SPACE/CLICK: Select | E: Cancel", menuX + 10, menuY + menuH + 10, 16, LIGHTGRAY);
     }
-    EndDrawing();
 }
