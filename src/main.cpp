@@ -105,7 +105,7 @@ void ResetNight() {
 
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    SetTraceLogLevel(LOG_WARNING);
+    SetTraceLogLevel(LOG_INFO);
     InitWindow(1280, 960, "Museum Tech Support");
     
     InitAudioDevice();
@@ -116,7 +116,7 @@ int main(void) {
     };
     for (const char* sn : sfxNames) {
         // Adjust "resources/" if you put them in a specific folder like "resources/sfx/"
-        sounds[sn] = LoadSound(TextFormat("resources/sound_effects/%s.wav", sn)); 
+        sounds[sn] = LoadSound(TextFormat("resources/sound_effects/%s.ogg", sn)); 
     }
     tutorialMusic = LoadMusicStream("resources/music/tutorial.ogg");
     deathMusic = LoadMusicStream("resources/music/death.ogg");
@@ -138,7 +138,10 @@ int main(void) {
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic"
     };
-    for (const char* mn : modelNames) { models[mn] = LoadModel(TextFormat("resources/%s.glb", mn)); }
+    for (const char* mn : modelNames) { 
+        const char* filePath = TextFormat("resources/%s.glb", mn);
+        models[mn] = LoadModel(filePath);
+    }
     
     models["Player"] = LoadModel("resources/worker.glb"); 
     int animCount = 0;
@@ -455,7 +458,7 @@ int main(void) {
                 if (currentAnimState == 3) playbackSpeed = 90.0f; 
 
                 animTimer += dt * playbackSpeed; 
-                animTimer = fmod(animTimer, (float)anims[activeIdx].frameCount); 
+                animTimer = fmod(animTimer, (float)anims[activeIdx].keyframeCount); 
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 

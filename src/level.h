@@ -1913,7 +1913,7 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "floor42", {-310.0, 0.0, 130.0}, {0,0,0}, {0,0,1}, {}, {}, {200,200,200,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
     e.back().boundsList = globalHitboxes["floor12"];
     e.back().interactBoundsList = globalHitboxes["floor12"];
-    e.push_back({ "Bench 1", {2690.0, 0.0, -530.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 253.0, {} });
+    e.push_back({ "bench1", {2690.0, 0.0, -530.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 253.0, {} });
     e.back().boundsList = globalHitboxes["bench1"];
     e.back().interactBoundsList = globalHitboxes["bench1"];
     e.push_back({ "Pillar 1", {2880.0, 0.0, 290.0}, {0,0,0}, {0,0,1}, {}, {}, {255,255,255,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
@@ -1970,10 +1970,10 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "Light 1", {880.0, 375.0, -60.0}, {0,0,0}, {0,0,1}, {}, {}, {253,249,0,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
     e.back().boundsList = globalHitboxes["light1"];
     e.back().interactBoundsList = globalHitboxes["light1"];
-    e.push_back({ "Bench 3", {110.0, 0.0, 300.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
+    e.push_back({ "bench3", {110.0, 0.0, 300.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
     e.back().boundsList = globalHitboxes["bench3"];
     e.back().interactBoundsList = globalHitboxes["bench3"];
-    e.push_back({ "Bench 3", {190.0, 0.0, 840.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 180.0, {} });
+    e.push_back({ "bench3", {190.0, 0.0, 840.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 180.0, {} });
     e.back().boundsList = globalHitboxes["bench3"];
     e.back().interactBoundsList = globalHitboxes["bench3"];
     e.push_back({ "floor42", {340.0, 0.0, 470.0}, {0,0,0}, {0,0,1}, {}, {}, {200,200,200,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
