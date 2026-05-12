@@ -175,7 +175,7 @@ inline ChemResult CanProcessChemistry(int toolIdx, int targetIdx, const std::vec
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_SANDALS)) return CHEM_USED_BUT_KEPT; // Tape the flying shoes
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) return CHEM_USED_BUT_KEPT;   // Wrap the mummy
     if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WATER_SOURCE)) return CHEM_ATTACHED; // Plug the trident puddle
-    
+    if (tool.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_MEDUSA)) return CHEM_ATTACHED;
     // ZEUS SOCKET LOGIC: Can put Lightning OR any Petrified item into Zeus's hand
     if (target.HasTag(TAG_ZEUS) && (tool.HasTag(TAG_LIGHTNING) || tool.isStone)) return CHEM_ATTACHED;
     
@@ -196,6 +196,8 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         return CHEM_USED_BUT_KEPT;
     }
     
+    
+
     // Sponge cleaning Sphinx Nose
     if (tool.HasTag(TAG_SPONGE) && target.HasTag(TAG_SPHINX_NOSE)) {
         target.color = BEIGE; return CHEM_USED_BUT_KEPT;
@@ -216,6 +218,18 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         tool.attachedTo = targetIdx; target.isGlitching = false; return CHEM_ATTACHED;
     }
     
+    // --- NEW FIX: Put Sunglasses on Medusa ---
+    if (tool.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_MEDUSA)) {
+        tool.attachedTo = targetIdx; 
+        target.isGlitching = false; // Cures the glitching immediately!
+        
+        // Offset the glasses slightly higher so they sit on her face/head
+        if (!target.boundsList.empty()) {
+            tool.position.y = target.position.y + target.boundsList[0].max.y;
+        }
+        return CHEM_ATTACHED;
+    }
+
     // Tape the Sandals
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_SANDALS)) {
         tool.stateValue -= 1.0f; 

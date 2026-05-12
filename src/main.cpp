@@ -451,7 +451,7 @@ int main(void) {
                             b.min.x += dropPos.x - 15.0f; 
                             b.max.x += dropPos.x + 15.0f; 
                             b.min.y = -1000.0f; 
-                            b.max.y += dropPos.y; 
+                            b.max.y += dropPos.y+100.0f; 
                             b.min.z += dropPos.z - 15.0f; 
                             b.max.z += dropPos.z + 15.0f; 
                         }
@@ -461,10 +461,24 @@ int main(void) {
                                 bool isStand = entities[i].name.find("stand") != std::string::npos;
                                 bool isGlitchingSandal = item.HasTag(TAG_SANDALS) && item.isGlitching;
 
-                                if ((isStand && !isGlitchingSandal) || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { 
+                                // --- NEW FIX: Check if the stand already has an item attached ---
+                                bool standOccupied = false;
+                                if (isStand) {
+                                    for (size_t j = 0; j < entities.size(); ++j) {
+                                        if (entities[j].attachedTo == (int)i) { 
+                                            standOccupied = true; 
+                                            break; 
+                                        }
+                                    }
+                                }
+
+                                // --- NEW FIX: Add !standOccupied to the if statement ---
+                                if ((isStand && !isGlitchingSandal && !standOccupied) || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { 
                                     interactTargets.push_back(i); 
                                 }                                
-                                else if (CanProcessChemistry(grabbedEntityIndex, i, entities) != CHEM_NONE) { interactTargets.push_back(i); }
+                                else if (CanProcessChemistry(grabbedEntityIndex, i, entities) != CHEM_NONE) { 
+                                    interactTargets.push_back(i); 
+                                }
                             }
                         }
 

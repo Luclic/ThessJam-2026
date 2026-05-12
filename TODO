@@ -50,6 +50,15 @@ water needs fixing, fire extiniguisher sound,
 pinakes, scale waterfall, aiolus bag, keraunos threeD model, mummy bed
 things fall through things
 
+sunglasses equip to pedestral, medusa has to start from the start of the night
+
+items teleport on top of walls, you teleport on top of walls
+sunglsses too high
+chalice doesnt glitch when attached to pedastal
+end of night shows and other irrelevant artifacts
+
+fusebox+lightning models
+
 {"Player", {
             {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
         }},

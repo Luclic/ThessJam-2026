@@ -99,6 +99,25 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
                 }
             }
         }
+
+
+        // --- WIND BAG VISUAL EFFECT (Expanding Gust Rings) ---
+        if (e->HasTag(TAG_WIND_BAG) && e->isGlitching && !e->HasTag(TAG_BROKEN)) {
+            float timeSec = (float)GetTime();
+            
+            // Draw 3 animated rings that constantly expand outward
+            for (int r = 0; r < 3; r++) {
+                // Math to make them loop endlessly from 0 to 600 radius
+                float ringRadius = fmod((timeSec * 350.0f) + (r * 200.0f), 600.0f); 
+                
+                // Make them fade out transparently as they get larger
+                float fade = 1.0f - (ringRadius / 600.0f); 
+                
+                // Draw the wind rings slightly off the floor
+                DrawCylinderWires({e->position.x, e->position.y + 20.0f, e->position.z}, ringRadius, ringRadius, 2.0f, 24, {200, 220, 255, (unsigned char)(200 * fade)});
+            }
+        }
+        // -----------------------------------------------------
     }
     EndMode3D();
     EndTextureMode();
