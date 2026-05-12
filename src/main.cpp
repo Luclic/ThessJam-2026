@@ -220,6 +220,7 @@ int main(void) {
     int mummyAnimCount = 0;
     ModelAnimation* mummyAnims = LoadModelAnimations("resources/models/mummy.glb", &mummyAnimCount);
     float mummyAnimTimer = 0.0f;
+    InitOverlayAssets();
 
     RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
@@ -562,13 +563,13 @@ int main(void) {
                 if (currentAnimState == 3) playbackSpeed = 90.0f; 
 
                 animTimer += dt * playbackSpeed; 
-                animTimer = fmod(animTimer, (float)anims[activeIdx].keyframeCount); 
+                animTimer = fmod(animTimer, (float)anims[activeIdx].frameCount); 
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 
             if (mummyAnims != nullptr && mummyAnimCount > 0) {
                 mummyAnimTimer += dt * 30.0f; 
-                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].keyframeCount);
+                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
                 UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
             }
 
@@ -643,8 +644,8 @@ int main(void) {
 
             if (isOverlayActive && grabbedEntityIndex != -1) {
                 // We now pass both the name AND the stateValue (which holds the ID)
-                UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep, entities[grabbedEntityIndex].name, entities[grabbedEntityIndex].stateValue);            }
-        }
+                UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep, entities[grabbedEntityIndex].name, entities[grabbedEntityIndex].stateTimer);        }
+            }
         EndDrawing();
         
         if (triggerShiftStart) {
@@ -664,6 +665,8 @@ int main(void) {
     // Clean up the shader programs from the GPU
     UnloadShader(clayShader);
     UnloadShader(postShader);
+
+    UnloadOverlayAssets();
     
     for (auto& pair : models) { UnloadModel(pair.second); }
 

@@ -2,64 +2,107 @@
 #include "raylib.h"
 #include <string>
 
-// We added 'float itemID' so we can tell Brochure 1 from Brochure 2!
-inline void UpdateAndRenderOverlay(bool& isOverlayActive, Music& currentMainMusic, Music& overlayMusic, int& tutorialStep, std::string docName, float itemID) {
-    // --- STATIC TEXTURE CACHE ---
-    static Texture2D handbookTex = { 0 };
-    static Texture2D brochureTexs[5] = { 0 };
-    static bool assetsLoaded = false;
+// Global texture cache for the overlay
+static Texture2D handbookTexs[3] = { 0 }; 
+static Texture2D brochureTexs[5] = { 0 };
 
-    if (!assetsLoaded) {
-        handbookTex = LoadTexture("resources/img/handbook.png");
-        for (int i = 0; i < 5; i++) {
-            //brochures[i] = LoadTexture(TextFormat("resources/img/brochure%d.png", i + 1));
-            continue;
-        }
-        assetsLoaded = true;
+inline void InitOverlayAssets() {
+    for (int i = 0; i < 3; i++) {
+        handbookTexs[i] = LoadTexture(TextFormat("resources/img/handbook%d.png", i + 1));
     }
+    for (int i = 0; i < 5; i++) {
+        brochureTexs[i] = LoadTexture(TextFormat("resources/img/brochure%d.png", i + 1));
+    }
+}
 
-    int screenW = GetScreenWidth();
-    int screenH = GetScreenHeight();
+inline void UnloadOverlayAssets() {
+    for (int i = 0; i < 3; i++) UnloadTexture(handbookTexs[i]);
+    for (int i = 0; i < 5; i++) UnloadTexture(brochureTexs[i]);
+}
+
+inline void UpdateAndRenderOverlay(bool& isOverlayActive, Music& currentMainMusic, Music& overlayMusic, int& tutorialStep, std::string docName, float itemID) {
+    static int currentHandbookPage = 0;
+
+    float screenW = (float)GetScreenWidth();
+    float screenH = (float)GetScreenHeight();
 
     // Dim the background
-    DrawRectangle(0, 0, screenW, screenH, {0, 0, 0, 200});
+    DrawRectangle(0, 0, (int)screenW, (int)screenH, {0, 0, 0, 200});
 
-    // Dimensions for the document display (Standard paper/brochure ratio)
-    int bookW = 600; 
-    int bookH = 800;
-    int startX = screenW / 2 - bookW / 2;
-    int startY = screenH / 2 - bookH / 2;
+    // --- DYNAMIC 16:9 SCALING MATH ---
+    float targetAspect = 16.0f / 9.0f; // Google Slides standard ratio
+    float screenAspect = screenW / screenH;
+    float padding = 0.85f; // Take up 85% of the screen so it feels like a nice popup
 
-    Texture2D* textureToDraw = nullptr;
+    float bookW, bookH;
 
-    // --- LOGIC TO SELECT THE CORRECT IMAGE ---
-    if (docName == "Open Book" || docName.find("Handbook") != std::string::npos) {
-        textureToDraw = &handbookTex;
-    } 
-    else if (docName == "Magazine" || docName.find("Brochure") != std::string::npos) {
-        // Remember: in Interactions.h we stored the brochure number (1-5) in stateValue!
-        int index = (int)itemID - 1; 
-        if (index >= 0 && index < 5) textureToDraw = &brochureTexs[index];
+    if (screenAspect > targetAspect) {
+        // Screen is wider than 16:9 (Ultra-wide monitor) -> Height is the limit
+        bookH = screenH * padding;
+        bookW = bookH * targetAspect;
+    } else {
+        // Screen is taller than 16:9 (Square/Vertical monitor) -> Width is the limit
+        bookW = screenW * padding;
+        bookH = bookW / targetAspect;
     }
 
-    // --- DRAWING ---
+    // Perfectly center the calculated dimensions
+    float startX = (screenW - bookW) / 2.0f;
+    float startY = (screenH - bookH) / 2.0f;
+    // ---------------------------------
+
+    Texture2D* textureToDraw = nullptr;
+    bool isHandbook = (docName == "Open Book" || docName.find("Handbook") != std::string::npos);
+
+    if (isHandbook) {
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) currentHandbookPage++;
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) currentHandbookPage--;
+        
+        if (currentHandbookPage < 0) currentHandbookPage = 0;
+        if (currentHandbookPage > 2) currentHandbookPage = 2;
+
+        textureToDraw = &handbookTexs[currentHandbookPage];
+    } 
+    else if (docName == "Magazine" || docName.find("Brochure") != std::string::npos) {
+        int index = ((int)itemID - 1) % 5; 
+        if (index < 0) index = 0;          
+        textureToDraw = &brochureTexs[index];
+    }
+
+    // --- DRAW THE IMAGE ---
     if (textureToDraw != nullptr && textureToDraw->id > 0) {
-        Rectangle src = { 0, 0, (float)textureToDraw->width, (float)textureToDraw->height };
-        Rectangle dest = { (float)startX, (float)startY, (float)bookW, (float)bookH };
+        Rectangle src = { 0.0f, 0.0f, (float)textureToDraw->width, (float)textureToDraw->height };
+        Rectangle dest = { startX, startY, bookW, bookH };
         DrawTexturePro(*textureToDraw, src, dest, { 0, 0 }, 0.0f, WHITE);
     } else {
-        // Fallback if image fails to load
-        DrawRectangle(startX, startY, bookW, bookH, RAYWHITE);
-        DrawRectangleLines(startX, startY, bookW, bookH, BLACK);
-        DrawText("DOCUMENT NOT FOUND", startX + 150, startY + 300, 20, RED);
+        // Fallback dynamically centered
+        DrawRectangle((int)startX, (int)startY, (int)bookW, (int)bookH, RAYWHITE);
+        DrawRectangleLines((int)startX, (int)startY, (int)bookW, (int)bookH, BLACK);
+        
+        const char* errText = "DOCUMENT NOT FOUND";
+        DrawText(errText, (int)(startX + bookW/2 - MeasureText(errText, 20)/2), (int)(startY + bookH/2 - 20), 20, RED);
+
+        DrawText(TextFormat("DEBUG INFO -> Name: %s | ID: %d", docName.c_str(), (int)itemID), (int)startX + 50, (int)(startY + bookH/2 + 20), 16, DARKGRAY);
+        DrawText(TextFormat("TEXTURE ID: %d", textureToDraw != nullptr ? textureToDraw->id : -1), (int)startX + 50, (int)(startY + bookH/2 + 50), 16, DARKGRAY);
+    }
+
+    // --- PAGINATION UI VISUALS ---
+    if (isHandbook) {
+        const char* pageText = TextFormat("Page %d of 3", currentHandbookPage + 1);
+        DrawText(pageText, (int)(screenW/2 - MeasureText(pageText, 20)/2), (int)(startY + bookH - 40), 20, DARKGRAY);
+        
+        // Dynamically place arrows outside the image bounds
+        if (currentHandbookPage > 0) DrawText("< (A)", (int)(startX - 70), (int)(screenH/2 - 10), 20, LIGHTGRAY);
+        if (currentHandbookPage < 2) DrawText("(D) >", (int)(startX + bookW + 20), (int)(screenH/2 - 10), 20, LIGHTGRAY);
     }
 
     const char* closeText = "Press 'ESC' or 'E' to close and resume shift.";
-    DrawText(closeText, screenW/2 - MeasureText(closeText, 20)/2, startY + bookH + 20, 20, WHITE);
+    DrawText(closeText, (int)(screenW/2 - MeasureText(closeText, 20)/2), (int)(startY + bookH + 20), 20, WHITE);
 
     // --- OVERLAY LOGIC ---
     if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_E)) {
         isOverlayActive = false;
+        currentHandbookPage = 0; 
         StopMusicStream(overlayMusic);
         ResumeMusicStream(currentMainMusic); 
         if (tutorialStep == 2) tutorialStep = 3; 

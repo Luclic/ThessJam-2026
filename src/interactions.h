@@ -77,17 +77,23 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
             e.canGrab = true; 
             e.name = "Open Book"; // Maps to Open Book.glb
         }
-        else if (e.name.find("Brochure") != std::string::npos) { 
+        else if (e.name.find("Brochure") != std::string::npos || e.name == "Magazine") { 
             e.AddTag(TAG_HANDBOOK); 
             e.canGrab = true; 
             
             // --- THE INITIALIZATION FIX ---
-            // Store the ID before we destroy the name!
-            if (e.name.find("1") != std::string::npos) e.stateValue = 1.0f;
-            else if (e.name.find("2") != std::string::npos) e.stateValue = 2.0f;
-            else if (e.name.find("3") != std::string::npos) e.stateValue = 3.0f;
-            else if (e.name.find("4") != std::string::npos) e.stateValue = 4.0f;
-            else if (e.name.find("5") != std::string::npos) e.stateValue = 5.0f;
+            // Store the ID in stateTimer so we don't destroy the Y-Rotation (stateValue)!
+            if (e.name.find("1") != std::string::npos) e.stateTimer = 1.0f;
+            else if (e.name.find("2") != std::string::npos) e.stateTimer = 2.0f;
+            else if (e.name.find("3") != std::string::npos) e.stateTimer = 3.0f;
+            else if (e.name.find("4") != std::string::npos) e.stateTimer = 4.0f;
+            else if (e.name.find("5") != std::string::npos) e.stateTimer = 5.0f;
+            else {
+                // If the Map Editor exported a generic "Magazine", auto-assign it a number 1-5!
+                static float autoID = 1.0f;
+                e.stateTimer = autoID;
+                autoID += 1.0f; if (autoID > 5.0f) autoID = 1.0f;
+            }
 
             e.name = "Magazine"; // Mapped to Magazine.glb
             
@@ -96,7 +102,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
                 e.boundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
                 e.interactBoundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
             }
-        } 
+        }
         
         // --- SIGNS (Legal Excuses) ---
         else if (e.name == "Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "sign1"; }
