@@ -255,33 +255,16 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     e.isGlitching = false;
                 } else {
                     bool hasCork = false;
-                    bool hasTape = false;
 
-                    // Pass 1: Check if it's already fixed by something
-                    for (size_t j = 0; j < entities.size(); ++j) {
-                        auto& item = entities[j];
-                        if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) { 
-                            hasCork = true; 
-                        }
-                        if (item.HasTag(TAG_TAPE) && item.attachedTo == (int)i) {
-                            hasTape = true;
+                    // Check for cork and handle Tape Application
+                    for (auto& item : entities) {
+                        if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) hasCork = true;
+                        if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                            if (!hasCork && !e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
                         }
                     }
 
-                    // Pass 2: Check if player is pressing 'F' (isUsing) with the Duct Tape to fix it
-                    for (size_t j = 0; j < entities.size(); ++j) {
-                        auto& item = entities[j];
-                        if (item.HasTag(TAG_TAPE) && item.isUsing && Vector3Distance(e.position, item.position) < 150.0f) {
-                            // Enforce mutually exclusive fixes: Only attach if cork isn't already doing the job
-                            if (!hasCork && !hasTape) {
-                                item.attachedTo = i;      // Snap tape to the bag
-                                item.isUsing = false;     // Consume the use input
-                                hasTape = true;
-                            }
-                        }
-                    }
-
-                    if (e.HasTag(TAG_BROKEN) || hasCork || hasTape) e.isGlitching = false;
+                    if (hasCork || e.HasTag(TAG_BROKEN)) e.isGlitching = false;
                     else e.isGlitching = true; 
                 }
             } else if (e.position.y <= -50.0f) {
@@ -308,33 +291,15 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     e.isGlitching = false;
                 } else {
                     bool hasCork = false;
-                    bool hasTape = false;
 
-                    // Pass 1: Check existing fixes
-                    for (size_t j = 0; j < entities.size(); ++j) {
-                        auto& item = entities[j];
-                        if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) { 
-                            hasCork = true; 
-                        }
-                        if (item.HasTag(TAG_TAPE) && item.attachedTo == (int)i) {
-                            hasTape = true;
+                    for (auto& item : entities) {
+                        if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) hasCork = true;
+                        if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                            if (!hasCork && !e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
                         }
                     }
 
-                    // Pass 2: Apply tape when pressing 'F'
-                    for (size_t j = 0; j < entities.size(); ++j) {
-                        auto& item = entities[j];
-                        if (item.HasTag(TAG_TAPE) && item.isUsing && Vector3Distance(e.position, item.position) < 150.0f) {
-                            // Enforce mutually exclusive fixes
-                            if (!hasCork && !hasTape) {
-                                item.attachedTo = i;       // Snap tape to the water source
-                                item.isUsing = false;      // Consume the use input
-                                hasTape = true;
-                            }
-                        }
-                    }
-
-                    if (hasCork || hasTape) e.isGlitching = false;
+                    if (hasCork || e.HasTag(TAG_BROKEN)) e.isGlitching = false;
                     else e.isGlitching = true;
                 }
             } else if (e.position.y <= -50.0f) {
@@ -358,8 +323,21 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         if (e.HasTag(TAG_SANDALS)) {
             bool activeTime = (currentNight >= 5) || (currentNight == 2 && shiftTimer >= 30.0f) || (currentNight > 2);
             if (activeTime && e.position.y > -50.0f) {
-                if (isPandoraOpen || e.stateTimer == -999.0f) e.isGlitching = false;
-                else e.isGlitching = true;
+
+                // Handle Tape Application
+                for (size_t j = 0; j < entities.size(); ++j) {
+                    auto& item = entities[j];
+                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                        if (!e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
+                    }
+                }
+
+                // e.isStone will be triggered seamlessly if Medusa shoots them!
+                if (isPandoraOpen || e.stateTimer == -999.0f || e.isStone || e.HasTag(TAG_BROKEN)) {
+                    e.isGlitching = false;
+                } else {
+                    e.isGlitching = true;
+                }
             } else if (e.position.y <= -50.0f) {
                 e.isGlitching = false;
             }
@@ -391,11 +369,28 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // DYNAMIC EVALUATION: Boulder
+        // DYNAMIC EVALUATION: Boulder (PROXIMITY FIX - No more physics jitter!)
         if (e.HasTag(TAG_BOULDER)) {
             bool activeTime = (currentNight >= 5) || (currentNight == 2 && shiftTimer >= 0.1f) || (currentNight > 2);
             if (activeTime && e.position.y > -50.0f) {
-                if (isPandoraOpen || e.HasTag(TAG_BROKEN)) e.isGlitching = false;
+                bool isBlocked = false;
+                float rollDir = -1.0f; 
+                
+                for (const auto& other : entities) {
+                    if (other.HasTag(TAG_SANDBAG) && !other.isGrabbed && other.position.y < 20.0f) {
+                        float distX = fabs(e.position.x - other.position.x);
+                        float distZ = fabs(e.position.z - other.position.z);
+                        if (distX < 120.0f && distZ < 100.0f) {
+                            if ((rollDir > 0 && other.position.x > e.position.x) || 
+                                (rollDir < 0 && other.position.x < e.position.x)) {
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (isPandoraOpen || e.HasTag(TAG_BROKEN) || isBlocked) e.isGlitching = false;
                 else e.isGlitching = true;
             } else if (e.position.y <= -50.0f) {
                 e.isGlitching = false;
@@ -404,19 +399,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             if (e.isGlitching) {
                 float rollDir = -1.0f; 
                 e.velocity.x += 120.0f * rollDir * dt; 
-
-                for (const auto& other : entities) {
-                    if (other.HasTag(TAG_SANDBAG) && !other.isGrabbed && other.position.y < 20.0f) {
-                        if (CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
-                            if ((rollDir > 0 && other.position.x > e.position.x) || 
-                                (rollDir < 0 && other.position.x < e.position.x)) {
-                                e.velocity.x = 0; 
-                                if (rollDir > 0) e.position.x = other.position.x - 45.0f;
-                                else e.position.x = other.position.x + 45.0f;
-                            }
-                        }
-                    }
-                }
 
                 if (CheckCollisionLists(e.GetWorldBounds(), player.GetWorldBounds())) {
                     if (player.position.x > e.position.x) { 

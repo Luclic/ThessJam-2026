@@ -160,6 +160,12 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
             e.isSolid = true; 
             e.isStatic = true; 
         }
+
+        else if (e.name == "Fuse Box") { 
+            e.name = "Fuse Box"; 
+            e.isSolid = true; 
+            e.isStatic = true; 
+        }
         
         // --- THE ULTIMATE BULLETPROOF HITBOX FALLBACK ---
         // If an item was exported with NO hitboxes, it becomes invisible to physics and falls through the floor!

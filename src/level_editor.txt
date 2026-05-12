@@ -95,6 +95,7 @@ std::vector<SpawnableProp> spawnList = {
     {"Lightning Bolt", "lightning", YELLOW},
     {"Mummy", "mummy", BEIGE},
     {"Coffin", "Coffin", BROWN},
+    {"Fuse Box", "Fuse Box", BROWN},
     {"Gleipnir Ribbon", "Snake", RED},
     {"Modern Art Sticker", "Sticker", PINK},
     {"Pandora's Box", "pandora", DARKPURPLE},
@@ -182,7 +183,7 @@ int main(void) {
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
         
         // Finalized Unique Models
-        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin"
+        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin", "Fuse Box"
     };
     for (const char* mn : modelNames) models[mn] = LoadModel(TextFormat("resources/models/%s.glb", mn));
 

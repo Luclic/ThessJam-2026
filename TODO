@@ -57,7 +57,11 @@ sunglsses too high
 chalice doesnt glitch when attached to pedastal
 end of night shows and other irrelevant artifacts
 
-fusebox+lightning models
+when you have the brochures etc open the music doesnt pause
+
+artifacts and items bounce on tables ticket tables dont have proper "equip" places for items
+
+fusebox+lightning modelsd
 
 {"Player", {
             {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
@@ -68,3 +72,14 @@ fusebox+lightning models
 add loading screen
 
 add models to main game
+
+first door is open during tutorial
+
+add continue screen if save file detected
+
+make select target menu proportional to screen, and look better
+
+banshee stone
+sun Disk
+mummy
+fuse box!!!

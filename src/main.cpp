@@ -93,7 +93,7 @@ void ResetNight() {
     showInteractMenu = false;
     
     for(int i = 0; i < 5; i++) doorsOpen[i] = false;
-    if (currentNight >= 1) doorsOpen[0] = true;
+    if (currentNight > 1) doorsOpen[0] = true;
     if (currentNight >= 2) doorsOpen[1] = true;
     if (currentNight >= 3) doorsOpen[2] = true;
     if (currentNight >= 4) doorsOpen[4] = true;
@@ -114,7 +114,7 @@ void ResetNight() {
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetTraceLogLevel(LOG_WARNING);
-    InitWindow(1280, 960, "Museum Tech Support");
+    InitWindow(1280, 960, "Mythic Maintenance");
 
     Font fontMuseum = LoadFontEx("resources/fonts/Playfair_Display/static/PlayfairDisplay-Bold.ttf", 250, 0, 0);
     Font fontEmployee = LoadFontEx("resources/fonts/Courier_Prime/CourierPrime-Bold.ttf", 250, 0, 0);
@@ -122,6 +122,21 @@ int main(void) {
     SetTextureFilter(fontMuseum.texture, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(fontEmployee.texture, TEXTURE_FILTER_BILINEAR);
     
+    BeginDrawing();
+    ClearBackground({15, 15, 20, 255}); // Match your sleek UI background
+    const char* loadMsg = "LOADING RESOURCES...";
+    Vector2 loadVec = MeasureTextEx(fontMuseum, loadMsg, 40, 1);
+    DrawTextEx(fontMuseum, loadMsg, { GetScreenWidth()/2.0f - loadVec.x/2.0f, GetScreenHeight()/2.0f - loadVec.y/2.0f }, 40, 1, {218, 165, 32, 255});
+    EndDrawing();
+    // ----------------------------------------------
+
+    currentNight = 1; 
+    std::ifstream saveFile("museum_save.dat", std::ios::binary);
+    if (saveFile.is_open()) {
+        saveFile.read((char*)&currentNight, sizeof(currentNight));
+        saveFile.close();
+    }
+
     InitAudioDevice();
     const char* sfxNames[] = {
         "ducktape", "fire-extenguisher", "handsaw", "plastictap-wetfloors", 
@@ -179,7 +194,7 @@ int main(void) {
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
-        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin", "sarcophagus", "Viking Boat", "Shield Round"
+        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin", "sarcophagus", "Viking Boat", "Shield Round", "Fuse Box"
     
     };
     for (const char* mn : modelNames) { 
@@ -232,8 +247,47 @@ int main(void) {
 
     GoToMenu();
 
+    float curVolMain = 0.0f, curVolTut = 0.0f, curVolDeath = 0.0f, curVolNews = 0.0f, curVolRev = 0.0f;
+    bool mainMusicPaused = false;
+
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
+
+        // --- GLOBAL AUDIO FADE SYSTEM ---
+        float targetMain = 0.0f, targetTut = 0.0f, targetDeath = 0.0f, targetNews = 0.0f, targetRev = 0.0f;
+        
+        if (currentState == STATE_MENU || currentState == STATE_OPTIONS || currentState == STATE_TUTORIAL) {
+            targetTut = mainMusicVolume;
+        } else if (currentState == STATE_REVIEW) {
+            targetRev = mainMusicVolume;
+        } else if (currentState == STATE_GAMEOVER_FIRED) {
+            targetNews = mainMusicVolume;
+        } else if (currentState == STATE_GAMEOVER_DEATH) {
+            targetDeath = mainMusicVolume;
+        } else if (currentState == STATE_PLAYING) {
+            if (isOverlayActive) targetTut = mainMusicVolume; // Chill music during handbook/overlays!
+            else targetMain = mainMusicVolume;                // Spooky music during active gameplay!
+        }
+
+        auto HandleFade = [&](Music& m, float& curVol, float targetVol) {
+            if (targetVol > 0.0f && !IsMusicStreamPlaying(m)) PlayMusicStream(m);
+            curVol += (targetVol - curVol) * dt * 2.0f; // Smooth 2.0x crossfade
+            if (curVol < 0.01f) curVol = 0.0f;
+            SetMusicVolume(m, curVol);
+        };
+
+        if (isMainMusicLoaded) {
+            HandleFade(mainMusic, curVolMain, targetMain);
+            // Physically pause the level music if the volume hits zero so it doesn't advance
+            if (targetMain == 0.0f && curVolMain < 0.05f && !mainMusicPaused) { PauseMusicStream(mainMusic); mainMusicPaused = true; }
+            else if (targetMain > 0.0f && mainMusicPaused) { ResumeMusicStream(mainMusic); mainMusicPaused = false; }
+        }
+        
+        HandleFade(tutorialMusic, curVolTut, targetTut);
+        HandleFade(deathMusic, curVolDeath, targetDeath);
+        HandleFade(newsMusic, curVolNews, targetNews);
+        HandleFade(reviewsMusic, curVolRev, targetRev);
+        // --------------------------------
 
         if (isMainMusicLoaded) UpdateMusicStream(mainMusic);
         UpdateMusicStream(tutorialMusic);
@@ -242,14 +296,13 @@ int main(void) {
         UpdateMusicStream(reviewsMusic);
 
         if (currentState == STATE_REVIEW) {
-            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 2.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
             BeginDrawing(); ClearBackground(RAYWHITE);
             DrawText("SHIFT COMPLETE - 8:00 AM", GetScreenWidth()/2 - 200, 100, 30, BLACK);
             DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 160, 20, DARKBLUE);
             int yOffset = 250;
             for (const auto& rev : lastReport.reviews) { DrawText(TextFormat("- %s: %s", rev.artifactName.c_str(), rev.reviewText.c_str()), 100, yOffset, 20, DARKGRAY); yOffset += 40; }
             DrawText("PRESS ENTER TO CONTINUE", GetScreenWidth()/2 - 150, GetScreenHeight() - 100, 20, GREEN);
-            if (IsKeyPressed(KEY_ENTER)) { SaveGame(currentNight, entities); StopMusicStream(reviewsMusic); ResetNight(); currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
+            if (IsKeyPressed(KEY_ENTER)) { SaveGame(currentNight, entities); ResetNight(); currentState = STATE_PLAYING; }
             EndDrawing(); continue;
         }
 
@@ -283,7 +336,7 @@ int main(void) {
             if (currentState == STATE_PLAYING) {
                 shiftTimer += dt;
                 if (shiftTimer >= SHIFT_DURATION) {
-                    lastReport = EvaluateMuseum(entities);
+                    lastReport = EvaluateMuseum(entities, currentNight);
                     if (lastReport.isFired) { currentState = STATE_GAMEOVER_FIRED; PlayMusicStream(newsMusic); } 
                     else { currentNight++; currentState = STATE_REVIEW; PlayMusicStream(reviewsMusic); }
                 }
@@ -376,8 +429,6 @@ int main(void) {
                         if (hName.find("Handbook") != std::string::npos || hName.find("Brochure") != std::string::npos || 
                             hName.find("Open Book") != std::string::npos || hName.find("Magazine") != std::string::npos) {
                             isOverlayActive = true;
-                            if (currentState == STATE_TUTORIAL) PauseMusicStream(tutorialMusic);
-                            PlayMusicStream(newsMusic); 
                             environmentF = true;
                         }
                     }
@@ -578,7 +629,7 @@ int main(void) {
             
             if (currentState == STATE_PLAYING || currentState == STATE_TUTORIAL) {
                 if (player.isStone || player.isDead) {
-                    lastReport = EvaluateMuseum(entities); 
+                    lastReport = EvaluateMuseum(entities, currentNight); 
                     currentState = STATE_GAMEOVER_DEATH;
                     PlayMusicStream(deathMusic); 
                 }
@@ -632,15 +683,17 @@ int main(void) {
 
         // The HUD and menus are drawn AFTER the shader mode is ended, so they remain unaffected!
         if (currentState == STATE_MENU || currentState == STATE_OPTIONS) {
-            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart, fontMuseum, fontEmployee); 
+            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart, fontMuseum, fontEmployee, currentNight); 
             SetMusicVolume(mainMusic, mainMusicVolume); SetMusicVolume(tutorialMusic, mainMusicVolume);
         } else {
             RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities, hazVis);
             
             if (currentState == STATE_TUTORIAL && !isOverlayActive) {
                 bool tutorialFinished = false;
-                UpdateAndRenderTutorial((int&)currentState, entities, grabbedEntityIndex, shiftTimer, tutorialFinished, tutorialStep, playerJumpedThisFrame);
-                if (tutorialFinished) { doorsOpen[0] = true; StopMusicStream(tutorialMusic); PlayMusicStream(mainMusic); }
+                UpdateAndRenderTutorial((int&)currentState, entities, grabbedEntityIndex, equippedEyewear, shiftTimer, tutorialFinished, tutorialStep, playerJumpedThisFrame, fontMuseum, fontEmployee);            
+                if (tutorialFinished) { 
+                    doorsOpen[0] = true; 
+                }
             }
 
             if (isOverlayActive && grabbedEntityIndex != -1) {
@@ -650,10 +703,12 @@ int main(void) {
         EndDrawing();
         
         if (triggerShiftStart) {
-            StopMusicStream(tutorialMusic);
             ResetNight(); 
-            if (currentNight == 1) { currentState = STATE_TUTORIAL; PlayMusicStream(tutorialMusic); } 
-            else { currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
+            if (currentNight == 1) { 
+                currentState = STATE_TUTORIAL; 
+            } else { 
+                currentState = STATE_PLAYING; 
+            }
             continue; 
         }
     }

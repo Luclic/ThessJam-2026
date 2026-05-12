@@ -3,7 +3,7 @@
 #include <algorithm>
 
 template <typename T>
-inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& triggerShiftStart, Font fontMuseum, Font fontEmployee) {
+inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& triggerShiftStart, Font fontMuseum, Font fontEmployee, int currentNight) {
     Vector2 mousePos = GetMousePosition();
     bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
 
@@ -69,7 +69,13 @@ inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& t
         }
         
         Color startColor = startHover ? RAYWHITE : LIGHTGRAY;
-        DrawTextEx(fontMuseum, "Start Shift", { startBtn.x, startBtn.y }, fontSizeBtn, 1, startColor);
+        const char* startText;
+        if (currentNight > 1) {
+            startText = TextFormat("CONTINUE (NIGHT %d)", currentNight);
+        } else {
+            startText = "START SHIFT";
+        }
+        DrawTextEx(fontMuseum, startText, { startBtn.x, startBtn.y }, fontSizeBtn, 1, startColor);
         
         if (startHover && clicked) triggerShiftStart = true; 
 
