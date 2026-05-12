@@ -1,6 +1,7 @@
 #pragma once
 #include "Entities.h"
 #include <vector>
+#include <string>
 
 enum ChemResult { CHEM_NONE, CHEM_ATTACHED, CHEM_USED_BUT_KEPT, CHEM_FIXED };
 
@@ -8,11 +9,6 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
     for (auto& e : entities) {
         // Quality of Life: Items on the floor are not solid so we don't trip on them
         if (e.canGrab) e.isSolid = false; 
-
-        else if (e.name == "Employee Handbook" || e.name == "Handbook") { 
-            e.AddTag(TAG_HANDBOOK); 
-            e.canGrab = true; 
-        }
 
         // --- DOORS ---
         if (e.name == "Door 1 (Greek 1)") { e.AddTag(TAG_DOOR_1); e.name = "wall4"; }
@@ -23,53 +19,84 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
 
         // --- NORDIC ROOM ---
         else if (e.name == "Mjolnir") { e.AddTag(TAG_MJOLNIR); e.AddTag(TAG_HEAVY); e.canGrab = false; e.name = "mjolner"; }
-        else if (e.name == "Sandal") { e.AddTag(TAG_SANDALS); e.canGrab = true; e.canThrow = true; } 
+        else if (e.name == "Sandal") { e.AddTag(TAG_SANDALS); e.canGrab = true; e.canThrow = true; e.name = "Sandal"; } 
         else if (e.name == "Banshee Stone") { e.AddTag(TAG_BANSHEE_STONE); e.canGrab = true; e.canThrow = true; e.name = "rocks"; }
-        else if (e.name == "Gleipnir Ribbon") { e.AddTag(TAG_GLEIPNIR); e.name = "Gleipnir"; } 
+        else if (e.name == "Gleipnir Ribbon") { e.AddTag(TAG_GLEIPNIR); e.name = "Snake"; } 
 
         // --- EGYPTIAN ROOM ---
         else if (e.name == "Sun Disk") { e.AddTag(TAG_SUN_DISK); e.AddTag(TAG_HEAT_SOURCE); e.canGrab = false; e.name = "Coin"; }
-        else if (e.name == "Anubis") { e.AddTag(TAG_MUMMY); e.name = "Anubis Statue"; }
-        else if (e.name == "Mummy") { e.AddTag(TAG_MUMMY); } 
+        else if (e.name == "Anubis" || e.name == "Anubis Statue") { e.AddTag(TAG_MUMMY); e.name = "Anubis Statue"; } // Matches both names!
+        else if (e.name == "Mummy") { e.AddTag(TAG_MUMMY); e.name = "mummy"; } 
         else if (e.name == "Sphinx") { e.AddTag(TAG_SPHINX); } 
         else if (e.name == "Sphinx Nose") { e.AddTag(TAG_SPHINX_NOSE); e.canGrab = true; } 
+        else if (e.name == "Coffin") { e.name = "Coffin"; }
 
         // --- GREEK ROOM ---
-        else if (e.name == "Medusa") { e.AddTag(TAG_MEDUSA); } 
-        else if (e.name == "Zeus Statue") { e.AddTag(TAG_ZEUS); e.isStatic = true; e.canGrab = false; e.isSolid = true; } 
-        
-        // TIMELINE FIX: Lightning is inert. TAG_ELECTRIC is injected on Night 3+ inside SetupNightHazards!
-        else if (e.name == "Lightning Bolt") { e.AddTag(TAG_LIGHTNING); e.canGrab = false; } 
-        
+        else if (e.name == "Medusa") { e.AddTag(TAG_MEDUSA); e.name = "medusa"; } 
+        else if (e.name == "Zeus Statue") { e.AddTag(TAG_ZEUS); e.isStatic = true; e.canGrab = false; e.isSolid = true; e.name = "zeus"; } 
+        else if (e.name == "Lightning Bolt") { e.AddTag(TAG_LIGHTNING); e.canGrab = false; e.name = "lightning"; } 
         else if (e.name == "Display Vase") { e.AddTag(TAG_FRAGILE); e.canGrab = true; e.canThrow = true; e.name = "Tall Vase"; }
-        else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = true; e.canThrow = true; } 
+        else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = true; e.canThrow = true; e.name = "Chalice"; } 
         else if (e.name == "Sisyphus Boulder") { e.AddTag(TAG_BOULDER); e.AddTag(TAG_HEAVY); e.name = "Rock"; }
         else if (e.name == "Aeolus Bag") { e.AddTag(TAG_WIND_BAG); e.canGrab = true; e.canThrow = true; e.name = "Coin Pouch"; }
 
+        // --- BOSS ROOM ---
+        else if (e.name == "Pandora's Box" || e.name == "PandoraBox" || e.name == "pandora") { 
+            e.AddTag(TAG_PANDORA); 
+            e.canGrab = false; 
+            e.isSolid = true; 
+            e.name = "pandora"; 
+        }
+
         // --- TOOLS & JANITOR ARSENAL ---
-        // Tutorial Trigger: Grabbing the Flashlight will end STATE_TUTORIAL in main.cpp
         else if (e.name == "Fire Extinguisher") { e.AddTag(TAG_EXTINGUISHER); e.canGrab = true; e.canThrow = true; e.name = "Fire Extinguisher"; }
         else if (e.name == "Flashlight") { e.AddTag(TAG_FLASHLIGHT); e.canGrab = true; e.name = "Time Hotel 7.07"; }
-        else if (e.name == "Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; }
+        else if (e.name == "Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Sunglasses"; }
         else if (e.name == "Pixel Glasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Pixel Sunglasses"; }
-        else if (e.name == "Glove") { e.AddTag(TAG_GLOVES); e.canGrab = true; }
+        else if (e.name == "Glove") { e.AddTag(TAG_GLOVES); e.canGrab = true; e.name = "Glove"; }
         else if (e.name == "Painters Tape") { e.AddTag(TAG_TAPE); e.stateValue = 10.0f; e.canGrab = true; e.name = "Time Hotel 5.25 Painters Tape"; }
-        else if (e.name == "Sponge") { e.AddTag(TAG_SPONGE); e.canGrab = true; }
+        else if (e.name == "Sponge") { e.AddTag(TAG_SPONGE); e.canGrab = true; e.name = "Sponge"; }
         else if (e.name == "Bag") { e.AddTag(TAG_SANDBAG); e.AddTag(TAG_HEAVY); e.canGrab = true; e.name = "Bag"; }
         else if (e.name == "Broom" || e.name == "Mop") { 
             e.AddTag(TAG_MOP); 
             e.canGrab = true; 
-            
-            // Fatten the interaction box so it's impossible to miss
+            e.name = "Broom"; 
             if (!e.interactBoundsList.empty()) {
                 e.interactBoundsList[0].min.x -= 30.0f; e.interactBoundsList[0].max.x += 30.0f;
                 e.interactBoundsList[0].min.z -= 30.0f; e.interactBoundsList[0].max.z += 30.0f;
-                e.interactBoundsList[0].max.y += 50.0f; // Make it taller to reach your hands
+                e.interactBoundsList[0].max.y += 50.0f; 
             }
         }
-        else if (e.name == "Saw") { e.AddTag(TAG_HOLE_SAW); e.canGrab = true; }
-        else if (e.name == "Cardboard Boxes") { e.AddTag(TAG_BUBBLE_WRAP); e.stateValue = 3.0f; e.canGrab = true; }
+        else if (e.name == "Saw") { e.AddTag(TAG_HOLE_SAW); e.canGrab = true; e.name = "Saw"; }
+        else if (e.name == "Cardboard Boxes") { e.AddTag(TAG_BUBBLE_WRAP); e.stateValue = 3.0f; e.canGrab = true; e.name = "Cardboard Boxes"; }
         else if (e.name == "Giant Cork") { e.AddTag(TAG_CORK); e.canGrab = true; e.name = "Cork"; }
+
+        // --- READABLES (YOUR EXACT CODE + ID FIX) ---
+        else if (e.name == "Employee Handbook" || e.name == "Handbook") { 
+            e.AddTag(TAG_HANDBOOK); 
+            e.canGrab = true; 
+            e.name = "Open Book"; // Maps to Open Book.glb
+        }
+        else if (e.name.find("Brochure") != std::string::npos) { 
+            e.AddTag(TAG_HANDBOOK); 
+            e.canGrab = true; 
+            
+            // --- THE INITIALIZATION FIX ---
+            // Store the ID before we destroy the name!
+            if (e.name.find("1") != std::string::npos) e.stateValue = 1.0f;
+            else if (e.name.find("2") != std::string::npos) e.stateValue = 2.0f;
+            else if (e.name.find("3") != std::string::npos) e.stateValue = 3.0f;
+            else if (e.name.find("4") != std::string::npos) e.stateValue = 4.0f;
+            else if (e.name.find("5") != std::string::npos) e.stateValue = 5.0f;
+
+            e.name = "Magazine"; // Mapped to Magazine.glb
+            
+            // Bulletproof fallback for the thin book shape
+            if (e.boundsList.empty()) {
+                e.boundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
+                e.interactBoundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
+            }
+        } 
         
         // --- SIGNS (Legal Excuses) ---
         else if (e.name == "Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "sign1"; }
@@ -77,39 +104,50 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Sign 3") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "sign3"; }
         else if (e.name == "Artifact Sign 1") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "artifactsign1"; }
         else if (e.name == "Artifact Sign 2") { e.AddTag(TAG_WET_SIGN); e.canGrab = false; e.name = "artifactsign2"; }
-    
-        // --- READABLES ---
-        else if (e.name == "Employee Handbook" || e.name == "Handbook") { 
-            e.AddTag(TAG_HANDBOOK); 
-            e.canGrab = true; 
-            
-            // Bulletproof fallback for the thin book shape
-            if (e.boundsList.empty()) {
-                e.boundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
-                e.interactBoundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
-            }
+        
+        // --- EXHAUSTIVE DECORATIONS & ARCHITECTURE MAPPING ---
+        // This explicitly maps any UI names or weird exports to the exact lowercase/underscore .glb name!
+        else if (e.name == "Wall (Press C)") e.name = "wall1";
+        else if (e.name == "Wall Corner (Press C)") e.name = "wall1corner";
+        else if (e.name == "Floor A (Press C)") e.name = "floor11";
+        else if (e.name == "Floor B (Press C)") e.name = "floor12";
+        else if (e.name == "Arch (Press C)") e.name = "arch1";
+        else if (e.name == "ArchArch (Press C)") e.name = "archarch1";
+        else if (e.name == "Pedestal 1") e.name = "stand1";
+        else if (e.name == "Pedestal 2") e.name = "stand2";
+        else if (e.name == "Pedestal 3") e.name = "stand3";
+        else if (e.name == "Pedestal 4") e.name = "stand4";
+        else if (e.name == "Bench 1") e.name = "bench1";
+        else if (e.name == "Bench 2") e.name = "bench2";
+        else if (e.name == "Bench 3" || e.name == "bench3") e.name = "bench3";
+        else if (e.name == "Desk") e.name = "desk";
+        else if (e.name == "Glass Case") e.name = "glasscase";
+        else if (e.name == "Pillar 1") e.name = "pillar1";
+        else if (e.name == "Pillar 2" || e.name == "pillar2") e.name = "pillar2";
+        else if (e.name == "Rope 1") e.name = "rope1";
+        else if (e.name == "Rope 2") e.name = "rope2";
+        else if (e.name == "Fence" || e.name == "fence") e.name = "fence";
+        else if (e.name == "Light 1") e.name = "light1";
+        else if (e.name == "Light 2") e.name = "light2";
+        else if (e.name == "Painting 1" || e.name == "painting1") e.name = "painting1";
+        else if (e.name == "Painting 2" || e.name == "painting2") e.name = "painting2";
+        else if (e.name == "Painting Light") e.name = "paintinglight";
+        else if (e.name == "Time Hotel Sign") e.name = "Time Hotel 7.07";
+        else if (e.name == "Ticket Stand") e.name = "ticketstand";
+        else if (e.name == "Ticket Seat") e.name = "ticketstandseat";
+        else if (e.name == "Modern Art Sticker") e.name = "Sticker";
+        else if (e.name == "Info Button") { e.isSolid = true; e.name = "Info Button"; }
+        
+        // --- THE ULTIMATE BULLETPROOF HITBOX FALLBACK ---
+        // If an item was exported with NO hitboxes, it becomes invisible to physics and falls through the floor!
+        // This forces a default 40x40 hitbox so NOTHING ever goes missing again.
+        if (e.boundsList.empty()) {
+            e.boundsList.push_back({{-20, 0, -20}, {20, 40, 20}});
         }
-        else if (e.name.find("Brochure") != std::string::npos) { 
-            e.AddTag(TAG_HANDBOOK); 
-            e.canGrab = true; 
-            
-            // Bulletproof fallback for the thin book shape
-            if (e.boundsList.empty()) {
-                e.boundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
-                e.interactBoundsList.push_back({{-15, 0, -20}, {15, 5, 20}});
-            }
-        }        // --- BOSS ROOM ---
-        else if (e.name == "Pandora's Box" || e.name == "PandoraBox") { 
-            e.AddTag(TAG_PANDORA); 
-            e.canGrab = false; 
-            e.isSolid = true; 
-            
-            // Bulletproof fallback if hitbox export is missing
-            if (e.boundsList.empty()) {
-                e.boundsList.push_back({{-30, 0, -30}, {30, 40, 30}});
-                e.interactBoundsList.push_back({{-30, 0, -30}, {30, 40, 30}});
-            }
-        }    }
+        if (e.interactBoundsList.empty()) {
+            e.interactBoundsList = e.boundsList;
+        }
+    }
 }
 
 // --- 2. IMPACT LOGIC ---

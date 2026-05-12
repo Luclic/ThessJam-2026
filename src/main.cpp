@@ -105,17 +105,15 @@ void ResetNight() {
 
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    SetTraceLogLevel(LOG_INFO);
+    SetTraceLogLevel(LOG_WARNING);
     InitWindow(1280, 960, "Museum Tech Support");
     
     InitAudioDevice();
-    // --- NEW: LOAD SOUND EFFECTS ---
     const char* sfxNames[] = {
         "ducktape", "fire-extenguisher", "handsaw", "plastictap-wetfloors", 
         "popping-bubble-wr", "sandbags-put-on-fl" 
     };
     for (const char* sn : sfxNames) {
-        // Adjust "resources/" if you put them in a specific folder like "resources/sfx/"
         sounds[sn] = LoadSound(TextFormat("resources/sound_effects/%s.ogg", sn)); 
     }
     tutorialMusic = LoadMusicStream("resources/music/tutorial.ogg");
@@ -136,19 +134,37 @@ int main(void) {
         "stand1", "stand2", "stand3", "stand4", "ticketstand", "ticketstandseat", "wall1", "wall1corner", "wall2", "wall2corner", "wall3", "wall3corner", "wall4", "wall4corner", 
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
-        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic"
+        "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
+        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin"
     };
     for (const char* mn : modelNames) { 
-        const char* filePath = TextFormat("resources/%s.glb", mn);
+        const char* filePath = TextFormat("resources/models/%s.glb", mn);
         models[mn] = LoadModel(filePath);
     }
     
-    models["Player"] = LoadModel("resources/worker.glb"); 
+    models["Player"] = LoadModel("resources/models/worker.glb"); 
     int animCount = 0;
-    ModelAnimation* anims = LoadModelAnimations("resources/worker.glb", &animCount);
+    ModelAnimation* anims = LoadModelAnimations("resources/models/worker.glb", &animCount);
     float animTimer = 0.0f;
     int currentAnimState = 0; 
-        
+    
+    // --- NEW: TEXTURES AND MUMMY ANIMATION ---
+    Image stoneImg = GenImageColor(2, 2, { 180, 180, 180, 255 }); 
+    Texture2D stoneTex = LoadTextureFromImage(stoneImg);
+    UnloadImage(stoneImg);
+
+    Texture2D zombieTex = LoadTexture("resources/models/ZombieTexture.png");
+    
+    // Assign textures safely
+    if (models.count("zeus")) models["zeus"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
+    if (models.count("Greek Temple")) models["Greek Temple"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
+    if (models.count("mummy")) models["mummy"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = zombieTex;
+
+    // Load Mummy Animations
+    int mummyAnimCount = 0;
+    ModelAnimation* mummyAnims = LoadModelAnimations("resources/models/mummy.glb", &mummyAnimCount);
+    float mummyAnimTimer = 0.0f;
+
     RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
@@ -204,7 +220,6 @@ int main(void) {
         bool triggerShiftStart = false;
         HazardVisuals hazVis;
 
-        // --- TIME & PHYSICS ARE PAUSED IF OVERLAY IS OPEN ---
         if (!isOverlayActive) {
             
             if (currentState == STATE_PLAYING) {
@@ -290,21 +305,18 @@ int main(void) {
                     Entity& held = entities[grabbedEntityIndex];
                     held.isUsing = IsKeyDown(KEY_F);
                     
-                    // --- NEW: FIRE EXTINGUISHER SUSTAINED SOUND ---
                     if (held.HasTag(TAG_EXTINGUISHER) && held.isUsing && !isOverlayActive) {
-                        if (!IsSoundPlaying(sounds["fire-extenguisher"])) {
-                            PlaySound(sounds["fire-extenguisher"]);
-                        }
+                        if (!IsSoundPlaying(sounds["fire-extenguisher"])) PlaySound(sounds["fire-extenguisher"]);
                     }
                 }
 
                 if (IsKeyPressed(KEY_F)) {
                     bool environmentF = false;
 
-                    // --- NEW: STRING-BASED OVERLAY TRIGGER ---
                     if (grabbedEntityIndex != -1) {
                         std::string hName = entities[grabbedEntityIndex].name;
-                        if (hName.find("Handbook") != std::string::npos || hName.find("Brochure") != std::string::npos) {
+                        if (hName.find("Handbook") != std::string::npos || hName.find("Brochure") != std::string::npos || 
+                            hName.find("Open Book") != std::string::npos || hName.find("Magazine") != std::string::npos) {
                             isOverlayActive = true;
                             if (currentState == STATE_TUTORIAL) PauseMusicStream(tutorialMusic);
                             PlayMusicStream(newsMusic); 
@@ -375,13 +387,29 @@ int main(void) {
                     interactTargets.clear();
                     if (grabbedEntityIndex != -1) {
                         Entity& item = entities[grabbedEntityIndex];
-                        Vector3 dropPos = { player.position.x + player.facingDir.x * 70.0f, player.position.y + 100.0f, player.position.z + player.facingDir.z * 70.0f };
-                        std::vector<BoundingBox> dropBoxList = item.boundsList; 
-                        for (auto& b : dropBoxList) { b.min.x += dropPos.x; b.max.x += dropPos.x; b.min.y += dropPos.y; b.max.y += dropPos.y; b.min.z += dropPos.z; b.max.z += dropPos.z; }
+                        
+                        // --- 1. SHORTER DROP REACH TO PREVENT OVERSHOOTING ---
+                        Vector3 dropPos = { player.position.x + player.facingDir.x * 50.0f, player.position.y + 100.0f, player.position.z + player.facingDir.z * 50.0f };
+                        
+                        // --- 2. FATTENED SWEEPING DROP COLUMN ---
+                        std::vector<BoundingBox> dropColList = item.boundsList; 
+                        for (auto& b : dropColList) { 
+                            b.min.x += dropPos.x - 15.0f; 
+                            b.max.x += dropPos.x + 15.0f; 
+                            b.min.y = -1000.0f; 
+                            b.max.y += dropPos.y; 
+                            b.min.z += dropPos.z - 15.0f; 
+                            b.max.z += dropPos.z + 15.0f; 
+                        }
                         
                         for(size_t i = 0; i < entities.size(); ++i) {
-                            if(i != grabbedEntityIndex && CheckCollisionLists(dropBoxList, entities[i].GetWorldInteractBounds())) {
-                                if (entities[i].name == "stand2" || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { interactTargets.push_back(i); } 
+                            if(i != grabbedEntityIndex && CheckCollisionLists(dropColList, entities[i].GetWorldInteractBounds())) {
+                                bool isStand = entities[i].name.find("stand") != std::string::npos;
+                                bool isGlitchingSandal = item.HasTag(TAG_SANDALS) && item.isGlitching;
+
+                                if ((isStand && !isGlitchingSandal) || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { 
+                                    interactTargets.push_back(i); 
+                                }                                
                                 else if (CanProcessChemistry(grabbedEntityIndex, i, entities) != CHEM_NONE) { interactTargets.push_back(i); }
                             }
                         }
@@ -389,16 +417,27 @@ int main(void) {
                         if (interactTargets.empty()) {
                             float targetY = 0.0f;
                             for(size_t i = 0; i < entities.size(); ++i) {
-                                if(i != grabbedEntityIndex && entities[i].isSolid && CheckCollisionLists(dropBoxList, entities[i].GetWorldBounds())) {
-                                    for (const auto& b : entities[i].GetWorldBounds()) { if (b.max.y > targetY) targetY = b.max.y; }
+                                // Only check against solid entities!
+                                if(i != grabbedEntityIndex && entities[i].isSolid && CheckCollisionLists(dropColList, entities[i].GetWorldBounds())) {
+                                    for (const auto& b : entities[i].GetWorldBounds()) { 
+                                        // Ignore the ceiling (Y > 150)
+                                        if (b.max.y > targetY && b.max.y < player.position.y + 150.0f) {
+                                            targetY = b.max.y; 
+                                        }
+                                    }
                                 }
                             }
-                            item.position = dropPos; item.position.y = targetY; 
+                            
+                            // --- 3. FIX ORIGIN SINKING ---
+                            float itemLocalMinY = 0.0f;
+                            if (!item.boundsList.empty()) itemLocalMinY = item.boundsList[0].min.y;
+                            
+                            item.position = dropPos; 
+                            item.position.y = targetY - itemLocalMinY; // Snap to perfectly rest on the surface!
+                            
                             if (item.HasTag(TAG_SANDALS)) item.stateTimer = 4.0f;
-                            // --- NEW: DROP SOUNDS ---
                             if (item.name.find("sign") != std::string::npos) PlaySound(sounds["plastictap-wetfloors"]);
                             if (item.HasTag(TAG_SANDBAG)) PlaySound(sounds["sandbags-put-on-fl"]);
-                            // ------------------------
                             item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1;
                         } else if (interactTargets.size() == 1) { executeAction = true; actionTargetIdx = interactTargets[0]; isDropMenu = true; } 
                         else { showInteractMenu = true; isDropMenu = true; interactSelectedIndex = 0; }
@@ -458,8 +497,15 @@ int main(void) {
                 if (currentAnimState == 3) playbackSpeed = 90.0f; 
 
                 animTimer += dt * playbackSpeed; 
-                animTimer = fmod(animTimer, (float)anims[activeIdx].keyframeCount); 
+                animTimer = fmod(animTimer, (float)anims[activeIdx].frameCount); 
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
+            }
+
+            // --- FIX: ANIMATE THE MUMMY ---
+            if (mummyAnims != nullptr && mummyAnimCount > 0) {
+                mummyAnimTimer += dt * 30.0f; // Speed of the zombie walk
+                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
+                UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
             }
 
             hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves, currentNight, shiftTimer);
@@ -500,7 +546,6 @@ int main(void) {
         }
         EndDrawing();
         
-        // SAFE TRANSITION CHECK (Placed here to avoid Iterator invalidation)
         if (triggerShiftStart) {
             StopMusicStream(tutorialMusic);
             ResetNight(); 
@@ -511,6 +556,9 @@ int main(void) {
     }
 
     if (anims) UnloadModelAnimations(anims, animCount);
+    if (mummyAnims) UnloadModelAnimations(mummyAnims, mummyAnimCount);
+    UnloadTexture(stoneTex);
+    UnloadTexture(zombieTex);
     for (auto& pair : models) { UnloadModel(pair.second); }
 
     if (isMainMusicLoaded) UnloadMusicStream(mainMusic);

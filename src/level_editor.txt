@@ -60,6 +60,7 @@ std::vector<SpawnableProp> spawnList = {
     {"Pillar 1", "pillar1", WHITE}, {"Pillar 2", "pillar2", WHITE},
     {"Rope 1", "rope1", RED}, {"Rope 2", "rope2", RED}, {"Fence", "fence", BROWN},
     {"Wall Shelf", "Wall Shelf", BROWN}, {"Shelves", "Shelves", BROWN},
+    {"Info Button", "Info Button", LIGHTGRAY},
     
     // Decor & Lighting
     {"Light 1", "light1", YELLOW}, {"Light 2", "light2", YELLOW}, 
@@ -75,7 +76,7 @@ std::vector<SpawnableProp> spawnList = {
     {"Bag", "Bag", BROWN}, {"Extinguisher", "Fire Extinguisher", RED},
     {"Flashlight", "Time Hotel 7.07", BLACK}, 
     {"Giant Cork", "Cork", BROWN},            
-    {"Mop", "Mop", BLUE},                     
+    {"Mop", "Broom", BLUE}, // Reusing Broom model                 
     
     // Exhibits (Has Assets)
     {"Waterfall", "Waterfall", BLUE}, {"Ocean", "Ocean", BLUE},
@@ -88,25 +89,23 @@ std::vector<SpawnableProp> spawnList = {
     {"Pyramid", "Pyramid", YELLOW}, {"Anubis", "Anubis Statue", BLACK},
     {"Mjolnir", "mjolner", GRAY}, {"Sandal", "Sandal", BROWN},
     {"Coin Pouch", "Coin Pouch", BROWN}, 
-    {"Aeolus Bag", "Coin Pouch", DARKBLUE}, // Reusing Coin Pouch model for the bag
-    
-    // Exhibits (Placeholders - Needs Models Later)
-    {"Medusa", "Medusa", GREEN},
-    {"Zeus Statue", "Zeus", YELLOW},
-    {"Mummy", "Mummy", BEIGE},
-    {"Gleipnir Ribbon", "Gleipnir", RED},
-    {"Sphinx", "Sphinx", GOLD},
-    {"Sphinx Nose", "SphinxNose", GOLD},
+    {"Aeolus Bag", "Coin Pouch", DARKBLUE}, // Reusing Coin Pouch
+    {"Medusa", "medusa", GREEN},
+    {"Zeus Statue", "zeus", YELLOW},
+    {"Lightning Bolt", "lightning", YELLOW},
+    {"Mummy", "mummy", BEIGE},
+    {"Coffin", "Coffin", BROWN},
+    {"Gleipnir Ribbon", "Snake", RED},
     {"Modern Art Sticker", "Sticker", PINK},
-
-    // --- NEW: PHASE 2 PROPS ---
-    {"Pandora's Box", "PandoraBox", DARKPURPLE},
-    {"Employee Handbook", "Handbook", DARKGRAY},
-    {"Brochure 1", "Brochure1", SKYBLUE},
-    {"Brochure 2", "Brochure2", BLUE},
-    {"Brochure 3", "Brochure3", PURPLE},
-    {"Brochure 4", "Brochure4", DARKPURPLE},
-    {"Brochure 5", "Brochure5", RED}
+    {"Pandora's Box", "pandora", DARKPURPLE},
+    
+    // Print Materials
+    {"Employee Handbook", "Open Book", DARKGRAY},
+    {"Brochure 1", "Magazine", SKYBLUE},
+    {"Brochure 2", "Magazine", BLUE},
+    {"Brochure 3", "Magazine", PURPLE},
+    {"Brochure 4", "Magazine", DARKPURPLE},
+    {"Brochure 5", "Magazine", RED}
 };
 
 bool DoButton(Rectangle rect, const char* text, Color col = {60, 60, 70, 255}) {
@@ -174,16 +173,18 @@ int main(void) {
 
     std::unordered_map<std::string, Model> models;
     const char* modelNames[] = {
+        // Architecture & Generic Props
         "artifactsign2", "bench1", "bench2", "bench3", "desk", "fence", "floor11", "floor12", "floor21", "floor22", "floor31", "floor32", "floor41", "floor42", 
         "glasscase", "light1", "light2", "painting1", "painting2", "paintinglight", "pillar1", "pillar2", "rope1", "rope2", "sign1", "sign2", "sign3", 
         "stand1", "stand2", "stand3", "stand4", "ticketstand", "ticketstandseat", "wall1", "wall1corner", "wall2", "wall2corner", "wall3", "wall3corner", "wall4", "wall4corner", 
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
-        "Medusa", "Zeus", "Mummy", "Gleipnir", "Cork", "Mop", "Sphinx", "SphinxNose", "Sticker",
-        "PandoraBox", "Handbook", "Brochure1", "Brochure2", "Brochure3", "Brochure4", "Brochure5"
+        
+        // Finalized Unique Models
+        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin"
     };
-    for (const char* mn : modelNames) models[mn] = LoadModel(TextFormat("resources/%s.glb", mn));
+    for (const char* mn : modelNames) models[mn] = LoadModel(TextFormat("resources/models/%s.glb", mn));
 
     std::vector<Entity> entities;
     InitLevel(entities); 
@@ -191,22 +192,28 @@ int main(void) {
     globalHitboxes = GetGlobalHitboxes();
     globalTweaks = GetGlobalTweaks();
     
+    // 1. Process entities from Level
     entities.erase(std::remove_if(entities.begin(), entities.end(), [](const Entity& e){ return e.name == "PhysicsWall"; }), entities.end());
     for (auto& e : entities) {
-        std::string baseName = GetBaseModelName(e.name);
+        // --- FIX: Map the entity name to its actual 3D model name! ---
+        std::string mName = e.name;
+        for (const auto& sp : spawnList) { if (sp.name == e.name) mName = sp.modelName; }
+        std::string baseName = GetBaseModelName(mName);
+
         if (baseName == "wall1" || baseName == "arch1") { if (e.boundsList.empty()) { e.boundsList.push_back({{-100, 0, -20}, {100, 100, 20}}); e.isSolid = true; } }
         if (globalHitboxes.find(baseName) == globalHitboxes.end()) {
             globalHitboxes[baseName] = e.boundsList; globalTweaks[baseName] = { 100.0f, {0,0,0}, 0.0f };
         }
     }
     
+    // 2. Pre-register ALL unplaced models from the Spawn List so they appear in Hitbox Editor!
     for (const auto& sp : spawnList) {
         std::string baseName = GetBaseModelName(sp.modelName);
         if (globalHitboxes.find(baseName) == globalHitboxes.end()) {
-            if (baseName == "Handbook" || baseName.find("Brochure") != std::string::npos) {
+            if (baseName == "Open Book" || baseName == "Magazine") {
                 globalHitboxes[baseName] = { {{-15, 0, -20}, {15, 5, 20}} }; 
             } 
-            else if (baseName == "PandoraBox") {
+            else if (baseName == "pandora") {
                 globalHitboxes[baseName] = { {{-30, 0, -30}, {30, 40, 30}} }; 
             } 
             else {
@@ -216,7 +223,13 @@ int main(void) {
         }
     }
 
-    for (const auto& pair : globalHitboxes) uniqueTypes.push_back(pair.first);
+    // 3. Build uniqueTypes array (Safely guarantees only actual models are shown, ignores polluted names)
+    for (const auto& sp : spawnList) {
+        std::string baseName = GetBaseModelName(sp.modelName);
+        if (std::find(uniqueTypes.begin(), uniqueTypes.end(), baseName) == uniqueTypes.end()) {
+            uniqueTypes.push_back(baseName);
+        }
+    }
 
     SaveState(entities); 
 
@@ -228,7 +241,6 @@ int main(void) {
     float hitCamAngle = 45.0f; float hitCamDist = 300.0f; float hitCamHeight = 200.0f;
     int pendingSpawnIdx = -1; float pendingRot = 0.0f;
 
-    // --- FEATURE: Global Rotation Mode Toggle ---
     static bool isRotationMode = false;
 
     while (!WindowShouldClose()) {
@@ -241,7 +253,6 @@ int main(void) {
         bool ctrlPressed = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
         bool shiftPressed = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 
-        // --- FEATURE: Toggle Rotation Mode ---
         if (IsKeyPressed(KEY_LEFT_ALT)) {
             isRotationMode = !isRotationMode;
             if (isRotationMode) SaveState(entities); 
@@ -263,7 +274,6 @@ int main(void) {
             if (IsKeyDown(KEY_A)) { camera.position.x -= camSpeed; camera.target.x -= camSpeed; }
             if (IsKeyDown(KEY_D)) { camera.position.x += camSpeed; camera.target.x += camSpeed; }
             
-            // --- FIX: Only zoom camera if mouse is inside the 3D space, preventing UI zoom bugs ---
             if (mousePos.x > UI_WIDTH) {
                 camera.position.y -= GetMouseWheelMove() * 300.0f;
             }
@@ -292,7 +302,6 @@ int main(void) {
 
             if (mousePos.x > UI_WIDTH && pendingSpawnIdx == -1) { 
                 
-                // --- FEATURE: Advanced Rotation Mode Handling ---
                 if (isRotationMode) {
                     if (!selectedIndices.empty()) {
                         float rotDelta = GetMouseDelta().x * 0.5f;
@@ -305,7 +314,7 @@ int main(void) {
                         }
                     }
                 } 
-                else { // NORMAL SELECTION & DRAGGING MODE
+                else { 
                     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                         int clickedIdx = -1; float closestDist = 99999.0f;
                         for (size_t i = 0; i < entities.size(); ++i) {
@@ -326,12 +335,10 @@ int main(void) {
                     if (isDragging && !selectedIndices.empty()) {
                         if (!justSavedState) { SaveState(entities); justSavedState = true; } 
                         
-                        // --- FEATURE: Height Placement Logic ---
                         if (ctrlPressed) {
                             float heightDelta = -GetMouseDelta().y * 1.0f; 
                             for (size_t i = 0; i < selectedIndices.size(); ++i) {
                                 entities[selectedIndices[i]].position.y += heightDelta;
-                                // Lock in the new height offset for when you release Ctrl
                                 dragOffsets[i].y = entities[selectedIndices[i]].position.y;
                             }
                         } else {
@@ -339,7 +346,6 @@ int main(void) {
                                 Vector3 newPos = Vector3Add(groundHit, dragOffsets[i]);
                                 entities[selectedIndices[i]].position.x = Snap(newPos.x, SNAP_GRID); 
                                 entities[selectedIndices[i]].position.z = Snap(newPos.z, SNAP_GRID);
-                                // The Y value naturally maintains whatever it was set to by the dragOffsets
                             }
                         }
                     }
@@ -431,7 +437,6 @@ int main(void) {
             DrawText("Ctrl+C/V: Copy/Paste | Ctrl+Z: Undo", 20, 145, 15, LIGHTGRAY);
             DrawText("5: EXPORT MAP", 20, 175, 30, GREEN);
 
-            // --- FEATURE: Inform the user when advanced rotation mode is enabled ---
             if (isRotationMode) {
                 DrawText("ROTATION MODE ACTIVE", UI_WIDTH + 20, 20, 20, GREEN);
                 DrawText("Move mouse left/right to spin. Press Left Alt to exit.", UI_WIDTH + 20, 45, 15, WHITE);
@@ -458,9 +463,9 @@ int main(void) {
                         DrawModel(modIt->second, {0,0,0}, 100.0f, WHITE);
                     } else { 
                         Vector3 phSize = {60, 60, 60}; 
-                        if (spawnList[i].modelName == "Handbook" || spawnList[i].modelName.find("Brochure") != std::string::npos) {
+                        if (spawnList[i].modelName == "Open Book" || spawnList[i].modelName == "Magazine") {
                             phSize = {40, 10, 50}; 
-                        } else if (spawnList[i].modelName == "PandoraBox") {
+                        } else if (spawnList[i].modelName == "pandora") {
                             phSize = {70, 50, 70}; 
                         }
                         DrawCube({0,50,0}, phSize.x, phSize.y, phSize.z, spawnList[i].color); 
@@ -479,7 +484,6 @@ int main(void) {
             std::vector<BoundingBox>& boxes = globalHitboxes[activeType];
             ModelTweak& tweak = globalTweaks[activeType];
 
-            // --- FIX: Segfault Guard. Prevents crashing if a box array is entirely empty! ---
             if (boxes.empty()) {
                 boxes.push_back({{-20, 0, -20}, {20, 40, 20}});
             }

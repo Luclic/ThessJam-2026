@@ -27,8 +27,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
     if (!e_start && shiftTimer >= 0.1f) {
         e_start = true;
-        // Night 2: Wind Room opens
-        if (currentNight == 2) { for(auto& e: entities) if(e.HasTag(TAG_BOULDER)) e.isGlitching = true; }
+        // Night 2-4: Boulder standard rolling. Night 5: Reserved for Boss fight.
+        if (currentNight >= 2 && currentNight < 5) { for(auto& e: entities) if(e.HasTag(TAG_BOULDER)) e.isGlitching = true; }
         // Night 3: Egyptian Room opens
         if (currentNight >= 3) { 
             for(auto& e: entities) {
@@ -39,27 +39,36 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         // Night 4: Nordic Room opens
         if (currentNight >= 4) { for(auto& e: entities) if(e.HasTag(TAG_BANSHEE_STONE)) { e.isGlitching = true; e.stateValue = 0.0f; } }
         // Night 5: The Boss Room opens
-        if (currentNight == 5) { for(auto& e: entities) if(e.HasTag(TAG_PANDORA)) e.isGlitching = true; }
+        if (currentNight >= 5) { for(auto& e: entities) if(e.HasTag(TAG_PANDORA)) e.isGlitching = true; }
     }
     
     if (!e_15s && shiftTimer >= 15.0f) {
         e_15s = true;
-        if (currentNight >= 1) { for(auto& e: entities) if(e.HasTag(TAG_MEDUSA)) e.isGlitching = true; }
+        if (currentNight >= 1) { for(auto& e: entities) if(e.HasTag(TAG_MEDUSA) && e.position.y > -50.0f) e.isGlitching = true; }
     }
     
     if (!e_30s && shiftTimer >= 30.0f) {
         e_30s = true;
-        if (currentNight >= 2) { for(auto& e: entities) if(e.HasTag(TAG_SANDALS)) e.isGlitching = true; }
+        if (currentNight >= 2) { for(auto& e: entities) if(e.HasTag(TAG_SANDALS) && e.position.y > -50.0f) e.isGlitching = true; }
     }
     
     if (!e_90s && shiftTimer >= 90.0f) {
         e_90s = true;
-        if (currentNight >= 1) { for(auto& e: entities) if(e.HasTag(TAG_WATER_SOURCE)) e.isGlitching = true; }
-        if (currentNight >= 2) { for(auto& e: entities) if(e.HasTag(TAG_WIND_BAG)) e.isGlitching = true; }
-        if (currentNight >= 3) { for(auto& e: entities) if(e.HasTag(TAG_SUN_DISK)) e.isGlitching = true; }
-        if (currentNight >= 4) { for(auto& e: entities) if(e.HasTag(TAG_GLEIPNIR)) e.isGlitching = true; }
+        if (currentNight >= 1) { for(auto& e: entities) if(e.HasTag(TAG_WATER_SOURCE) && e.position.y > -50.0f) e.isGlitching = true; }
+        if (currentNight >= 2) { for(auto& e: entities) if(e.HasTag(TAG_WIND_BAG) && e.position.y > -50.0f) e.isGlitching = true; }
+        if (currentNight >= 3) { for(auto& e: entities) if(e.HasTag(TAG_SUN_DISK) && e.position.y > -50.0f) e.isGlitching = true; }
+        if (currentNight >= 4) { for(auto& e: entities) if(e.HasTag(TAG_GLEIPNIR) && e.position.y > -50.0f) e.isGlitching = true; }
     }
     // ---------------------------------------
+
+    // Check if Pandora's Box is currently active for Wall Phasing
+    bool isPandoraActive = false;
+    for (auto& p : entities) {
+        if (p.HasTag(TAG_PANDORA) && p.isGlitching && p.stateTimer <= 0.0f && !p.HasTag(TAG_BROKEN)) {
+            isPandoraActive = true;
+            break;
+        }
+    }
 
     for (size_t i = 0; i < entities.size(); ++i) {
         Entity& e = entities[i];
@@ -78,21 +87,62 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         
         if (e.attachedTo != -1) {
             Entity& parent = entities[e.attachedTo];
+            
+            // --- NEW: THE SISYPHUS BLENDER ORBIT ---
+            if (e.HasTag(TAG_BOULDER) && parent.HasTag(TAG_PANDORA)) {
+                e.stateTimer += dt * 8.0f; // Orbit speed
+                // Mathematically lock the boulder to Pandora's exact position
+                e.position.x = parent.position.x + cos(e.stateTimer) * 120.0f; 
+                e.position.y = parent.position.y + 10.0f; 
+                e.position.z = parent.position.z + sin(e.stateTimer) * 120.0f;
+                e.velocity = {0,0,0};
+                
+                // The boulder still smashes fragile things while orbiting!
+                for (auto& f : entities) {
+                    if (&e != &f && (f.HasTag(TAG_FRAGILE) || f.HasTag(TAG_MEDUSA)) && !f.HasTag(TAG_BROKEN)) {
+                        if (CheckCollisionLists(e.GetWorldBounds(), f.GetWorldBounds())) {
+                            f.AddTag(TAG_BROKEN); f.color = DARKGRAY; f.attachedTo = -1;
+                        }
+                    }
+                }
+                continue; 
+            }
+
+            float localMinY = e.boundsList.empty() ? 0.0f : e.boundsList[0].min.y;
             e.position = parent.position; 
             
-            float parentHeight = parent.boundsList.empty() ? 10.0f : parent.boundsList[0].max.y;
-            e.position.y = parent.position.y + parentHeight; 
+            if (parent.name.find("stand") != std::string::npos) {
+                // PEDESTALS: Uses the parent's actual height hitbox so it sits beautifully on top
+                float parentHeight = parent.boundsList.empty() ? 40.0f : parent.boundsList[0].max.y;
+                e.position.y = parent.position.y + parentHeight - localMinY + 90.0f; 
+            } 
+            else if (parent.HasTag(TAG_ZEUS)) {
+                // ZEUS: Totally custom coordinates. You can fine tune these!
+                e.position.x -= 40.0f; 
+                e.position.y += 120.0f - localMinY; 
+                e.position.z += 10.0f; 
+            } 
+            else if (parent.HasTag(TAG_FUSEBOX)) {
+                // FUSEBOX: Snaps into the socket
+                e.position.z += 20.0f; 
+                e.position.y -= 20.0f - localMinY; 
+            } 
+            else {
+                // FALLBACK
+                float parentHeight = parent.boundsList.empty() ? 10.0f : parent.boundsList[0].max.y;
+                e.position.y = parent.position.y + parentHeight - localMinY; 
+            }
             
-            if (parent.HasTag(TAG_ZEUS)) { e.position.x -= 40.0f; e.position.y += 40.0f; } 
-            if (parent.HasTag(TAG_FUSEBOX)) { e.position.z += 20.0f; e.position.y -= 20.0f; } 
-            e.velocity = {0,0,0}; continue; 
+            e.velocity = {0,0,0}; continue;
         }
+        
         if ((int)i == equippedEyewear) {
             e.position.x = player.position.x + player.facingDir.x * 15.0f;
             e.position.y = player.position.y + 135.0f; 
             e.position.z = player.position.z + player.facingDir.z * 15.0f;
             e.velocity = {0,0,0}; continue;
         }
+        
         if ((int)i == equippedGloves) {
             e.position.x = player.position.x + player.facingDir.x * 25.0f;
             e.position.y = player.position.y + 80.0f; 
@@ -106,6 +156,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             currentFriction = 0.2f; // Slippery ice physics!
             e.stateTimer -= dt; 
         }
+        
         for (auto& w : entities) {
             if (w.HasTag(TAG_WATER_SOURCE) && w.isStone && Vector3Distance(e.position, w.position) < w.stateValue) {
                 currentFriction = 0.5f; 
@@ -128,8 +179,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             e.velocity.x = cosf(timeSec * 0.5f) * 500.0f;
             e.velocity.z = sinf(timeSec * 0.35f) * 500.0f;
         }
+        
         if (e.HasTag(TAG_SANDALS) && !e.isGlitching && !e.isGrabbed && !e.isStone && e.position.y < 20.0f) {
-            // Un-taped sandals will eventually re-activate
             if (e.stateTimer > 0.0f) { e.stateTimer -= dt; if (e.stateTimer <= 0.0f) e.isGlitching = true; }
         }
 
@@ -187,11 +238,14 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
+        // --- X/Z AXIS COLLISION (Smooth Sliding Fix) ---
         if (abs(e.velocity.x) > 0.1f && !e.isGrabbed) {
+            float oldX = e.position.x;
             e.position.x += e.velocity.x * dt;
             std::vector<BoundingBox> nextX = e.GetWorldBounds();
+            bool collided = false;
             for (auto& other : entities) {
-                if (e.HasTag(TAG_BOULDER) && other.name == "stand2") continue; 
+                if (e.HasTag(TAG_BOULDER) && other.name.find("stand") != std::string::npos) continue; 
                 if (e.HasTag(TAG_BOULDER) && other.name == "Player") continue; 
                 if (e.name == "Player" && other.HasTag(TAG_BOULDER)) continue; 
 
@@ -199,31 +253,41 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     if (fabs(e.position.x - other.position.x) > 300.0f || fabs(e.position.z - other.position.z) > 300.0f) continue;
                     bool isObstacleTallEnough = false;
                     for (const auto& ob : other.GetWorldBounds()) {
-                        if (ob.max.y > e.position.y + 5.0f) isObstacleTallEnough = true;
+                        if (ob.max.y > e.position.y + 5.0f) { isObstacleTallEnough = true; break; }
                     }
                     if (isObstacleTallEnough && CheckCollisionLists(nextX, other.GetWorldBounds())) {
-                        e.position.x -= e.velocity.x * dt; e.velocity.x *= -0.5f; break;
+                        collided = true; break;
                     }
                 }
+            }
+            if (collided) {
+                e.position.x = oldX; 
+                e.velocity.x = 0.0f; // Stops the input-feedback sticking loop
             }
         }
         
         if (abs(e.velocity.z) > 0.1f && !e.isGrabbed) {
+            float oldZ = e.position.z;
             e.position.z += e.velocity.z * dt;
             std::vector<BoundingBox> nextZ = e.GetWorldBounds();
+            bool collided = false;
             for (auto& other : entities) {
-                if (e.HasTag(TAG_BOULDER) && other.name == "stand2") continue; 
+                if (e.HasTag(TAG_BOULDER) && other.name.find("stand") != std::string::npos) continue; 
 
                 if (&e != &other && other.isSolid && !other.isGrabbed && e.attachedTo == -1) {
                     if (fabs(e.position.x - other.position.x) > 300.0f || fabs(e.position.z - other.position.z) > 300.0f) continue;
                     bool isObstacleTallEnough = false;
                     for (const auto& ob : other.GetWorldBounds()) {
-                        if (ob.max.y > e.position.y + 5.0f) isObstacleTallEnough = true;
+                        if (ob.max.y > e.position.y + 5.0f) { isObstacleTallEnough = true; break; }
                     }
                     if (isObstacleTallEnough && CheckCollisionLists(nextZ, other.GetWorldBounds())) {
-                        e.position.z -= e.velocity.z * dt; e.velocity.z *= -0.5f; break;
+                        collided = true; break;
                     }
                 }
+            }
+            if (collided) {
+                e.position.z = oldZ; 
+                e.velocity.z = 0.0f; // Stops the input-feedback sticking loop
             }
         }
 
@@ -395,7 +459,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     Vector2 targetPos2D = {target.position.x, target.position.z};
                     if(CheckCollisionPointTriangle(targetPos2D, ep1, ep2, ep3)) {
                         
-                        // --- CORRECTED MJOLNIR ICE SLICK SYNERGY ---
                         if (target.HasTag(TAG_MJOLNIR)) {
                             target.velocity.x += dir.x * 4000.0f * dt;
                             target.velocity.z += dir.z * 4000.0f * dt;
@@ -413,7 +476,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                             target.velocity.z += dir.z * 2500.0f * dt;
                         }
 
-                        // Inside the Extinguisher's CheckCollisionPointTriangle...
                         if (target.HasTag(TAG_PANDORA) && target.isGlitching) {
                             target.stateTimer = 15.0f; // Thermal Shock freezes it for 15s
                         }
@@ -447,7 +509,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // --- CORRECTED MJOLNIR PHYSICS (Hovering & Dragging) ---
         if (e.HasTag(TAG_MJOLNIR)) {
             if (e.canGrab && !e.isGrabbed) {
                 float timeSec = (float)GetTime();
@@ -499,27 +560,23 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // --- UPGRADED BANSHEE STONE (Night 4 Random Selection + Standard AoE) ---
         if (e.HasTag(TAG_BANSHEE_STONE) && e.isGlitching && !e.isStone) {
-            // Speed adjusted so it pops 4 times over 180 seconds on Night 4
             float growthSpeed = (currentNight == 4) ? 17.77f : 400.0f;
             e.stateValue += growthSpeed * dt; 
             
             if (e.stateValue > 800.0f) {
                 if (currentNight == 4) {
-                    // Random Targeted Effect!
                     int effect = GetRandomValue(0, 2);
                     if (effect == 0) {
-                        for(auto& t: entities) if(t.HasTag(TAG_SUN_DISK)) t.isGlitching = true;
+                        for(auto& t: entities) if(t.HasTag(TAG_SUN_DISK) && t.position.y > -50.0f) t.isGlitching = true;
                     } else if (effect == 1) {
-                        for(auto& t: entities) if(t.HasTag(TAG_MUMMY)) { t.isGlitching = true; t.RemoveTag(TAG_BROKEN); t.color = WHITE; }
+                        for(auto& t: entities) if(t.HasTag(TAG_MUMMY) && t.position.y > -50.0f) { t.isGlitching = true; t.RemoveTag(TAG_BROKEN); t.color = WHITE; }
                     } else {
-                        for(auto& t: entities) if(t.HasTag(TAG_SANDALS)) { t.isGlitching = true; t.stateTimer = 0.0f; }
+                        for(auto& t: entities) if(t.HasTag(TAG_SANDALS) && t.position.y > -50.0f) { t.isGlitching = true; t.stateTimer = 0.0f; }
                     }
                 } else {
-                    // Standard AoE Chaos
                     for (auto& target : entities) {
-                        if (&target != &e && !target.isStatic && !target.isGrabbed && target.name != "Player") {
+                        if (&target != &e && !target.isStatic && !target.isGrabbed && target.name != "Player" && target.position.y > -50.0f) {
                             if (Vector3Distance(e.position, target.position) < 800.0f) target.isGlitching = true;
                         }
                     }
@@ -534,7 +591,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
             if (e.isGlitching) { 
                 for (auto& target : entities) {
-                    if (&target != &e && target.attachedTo == -1 && !target.isStone && !target.isStatic) {
+                    if (&target != &e && target.attachedTo == -1 && !target.isStone && !target.isStatic && target.position.y > -50.0f) {
                         float dist = Vector3Distance(e.position, target.position);
                         if (dist < 600.0f && dist > 5.0f) {
                             bool isBlocked = false;
@@ -586,39 +643,31 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 continue; // Box is frozen, gravity pauses
             } else { e.color = PURPLE; }
 
-            // Define Mutation Flags (Bitmasking stored in stateValue)
-            int MUT_WIND    = 1 << 0;
-            int MUT_MEDUSA  = 1 << 1;
-            int MUT_SANDALS = 1 << 2;
-            int MUT_ZEUS    = 1 << 3;
-            int MUT_MUMMY   = 1 << 4;
-            int MUT_WATER   = 1 << 5;
-            int MUT_GLEIPNIR= 1 << 6;
-            int MUT_BANSHEE = 1 << 7;
-
+            // Define Mutation Flags (Bitmask)
+            enum Mutations { MUT_WIND=1, MUT_MEDUSA=2, MUT_SANDALS=4, MUT_ZEUS=8, MUT_MUMMY=16, MUT_WATER=32, MUT_GLEIPNIR=64, MUT_BANSHEE=128 };
             int currentMutations = (int)e.stateValue;
 
-            // Base Singularity Stats
             float pullStrength = 850.0f; 
-            float eventHorizon = 50.0f;  
-            float gravityRange = 2000.0f;
+            float eventHorizon = 60.0f;  
+            float gravityRange = 99999.0f; // INFINITE RANGE
 
-            // MUTATION: Banshee Stone (Amplified Gravity)
-            if (currentMutations & MUT_BANSHEE) { pullStrength *= 2.0f; eventHorizon = 100.0f; gravityRange = 4000.0f; }
-            // MUTATION: Wind Bag (Polarity Inversion)
-            if (currentMutations & MUT_WIND) { pullStrength = -1200.0f; } // Pushes instead of pulls!
+            if (currentMutations & MUT_BANSHEE) { pullStrength *= 2.0f; eventHorizon = 100.0f; }
             
-            // MUTATION: Hermes Sandals (Mobile Singularity)
             if (currentMutations & MUT_SANDALS) {
-                e.position.x += sin(GetTime() * 2.0f) * 150.0f * dt;
-                e.position.z += cos(GetTime() * 1.5f) * 150.0f * dt;
+                e.position.x += sin((float)GetTime() * 2.0f) * 150.0f * dt;
+                e.position.z += cos((float)GetTime() * 1.5f) * 150.0f * dt;
             }
 
             for (auto& other : entities) {
-                if (&e == &other || other.isStatic || other.attachedTo != -1 || other.isGrabbed) continue;
+                // EXPLICIT CHECK: Ensure floors/walls/static architecture are completely ignored!
+                if (other.name == "Floor" || other.name == "Wall" || other.isStatic) continue;
+
+                if (&e == &other || other.attachedTo != -1 || other.isGrabbed || other.position.y < -50.0f) continue;
                 float dist = Vector3Distance(e.position, other.position);
                 
-                // --- THE EVENT HORIZON (CONSUMPTION) ---
+                if (dist > gravityRange) continue;
+                Vector3 dir = Vector3Normalize(Vector3Subtract(e.position, other.position));
+                
                 if (dist < eventHorizon) {
                     // CURE 2: Mjolnir (The Absolute Clog)
                     if (other.HasTag(TAG_MJOLNIR)) { e.isGlitching = false; e.AddTag(TAG_BROKEN); e.color = DARKGRAY; continue; }
@@ -633,53 +682,49 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                         if (other.HasTag(TAG_ZEUS)) currentMutations |= MUT_ZEUS;
                         if (other.HasTag(TAG_MUMMY)) {
                             currentMutations |= MUT_MUMMY;
-                            for (auto& f : entities) if (f.HasTag(TAG_FUSEBOX)) f.stateValue = 0.0f; // Permanent blackout
+                            for (auto& f : entities) if (f.HasTag(TAG_FUSEBOX)) f.stateValue = 0.0f; 
                         }
                         if (other.HasTag(TAG_WATER_SOURCE) || other.HasTag(TAG_SPONGE)) currentMutations |= MUT_WATER;
                         if (other.HasTag(TAG_GLEIPNIR)) currentMutations |= MUT_GLEIPNIR;
                         if (other.HasTag(TAG_BANSHEE_STONE)) currentMutations |= MUT_BANSHEE;
 
-                        e.stateValue = (float)currentMutations; // Save mutations back to Box
-                        
-                        // Erase the item from the map
+                        e.stateValue = (float)currentMutations; 
                         other.position.y = -1000.0f; 
                         other.velocity = {0,0,0};
                         other.isGlitching = false;
                         other.canGrab = false; 
                     }
-                } 
-                // --- THE GRAVITY WELL (PULLING & CHAOS EFFECTS) ---
-                else if (dist < gravityRange) {
-                    Vector3 dir = Vector3Normalize(Vector3Subtract(e.position, other.position));
-                    
-                    // Sisyphus Boulder (The Blender Orbit)
+                } else {
+                    // --- THE TRAP: CATCH THE BOULDER ---
                     if (other.HasTag(TAG_BOULDER)) {
-                        if (dist < 200.0f) {
-                            Vector3 perp = {-dir.z, 0.0f, dir.x}; // Tangential thrust
-                            other.velocity.x += perp.x * 6000.0f * dt;
-                            other.velocity.z += perp.z * 6000.0f * dt;
-                            // Centrifugal anti-gravity to keep it in orbit
-                            other.velocity.x -= dir.x * pullStrength * 1.5f * dt;
-                            other.velocity.z -= dir.z * pullStrength * 1.5f * dt;
-                            continue; // Skips normal pull so it stays in orbit
+                        if (dist < 180.0f) { 
+                            other.attachedTo = (int)(&e - &entities[0]); 
+                            other.stateTimer = 0.0f; 
+                            continue; 
                         }
                     }
 
-                    // Standard Pull Force
                     float applyForce = pullStrength;
-                    if (other.HasTag(TAG_HEAVY) && other.stateTimer <= 0.0f) applyForce *= 0.1f;
+                    if (other.HasTag(TAG_HEAVY) && other.stateTimer <= 0.0f) {
+                        if (other.HasTag(TAG_MJOLNIR)) continue; 
+                        applyForce *= 0.1f;
+                    }
                     if (other.name == "Player") applyForce *= 1.2f; 
+                    
                     other.velocity.x += dir.x * applyForce * dt;
                     other.velocity.z += dir.z * applyForce * dt;
 
-                    // MUTATION: Water Washing Machine (Global Ice Physics Hack)
+                    if ((currentMutations & MUT_WIND) && !other.HasTag(TAG_MJOLNIR)) {
+                        Vector3 vortexDir = {-dir.z, 0.0f, dir.x}; 
+                        other.velocity.x += vortexDir.x * 1500.0f * dt;
+                        other.velocity.z += vortexDir.z * 1500.0f * dt;
+                    }
+
                     if (currentMutations & MUT_WATER) {
-                        // Negates normal friction by adding momentum back
                         other.velocity.x += other.velocity.x * 5.0f * dt; 
                         other.velocity.z += other.velocity.z * 5.0f * dt;
                     }
 
-                    // MUTATION: Medusa Event Horizon
                     if ((currentMutations & MUT_MEDUSA) && dist < 250.0f) {
                         bool immune = (other.name == "Player" && equippedEyewear != -1 && !entities[equippedEyewear].HasTag(TAG_BROKEN));
                         if (!immune && (other.canGrab || other.name == "Player")) {
@@ -687,17 +732,15 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                         }
                     }
 
-                    // MUTATION: Zeus Tesla Coil
                     if ((currentMutations & MUT_ZEUS) && dist < 300.0f) {
                         if (other.name == "Player" && equippedGloves == -1) {
-                            if (GetRandomValue(0, 100) < 3) player.isDead = true; // Lethal arcs
+                            if (GetRandomValue(0, 100) < 3) player.isDead = true; 
                         }
                     }
 
-                    // MUTATION: Gleipnir Tentacles
                     if ((currentMutations & MUT_GLEIPNIR) && dist < 500.0f && other.name == "Player") {
                         if (GetRandomValue(0, 100) < 5) {
-                            other.velocity.x += dir.x * 3000.0f * dt; // Violent yank
+                            other.velocity.x += dir.x * 3000.0f * dt; 
                             other.velocity.z += dir.z * 3000.0f * dt;
                         }
                     }
@@ -723,7 +766,7 @@ inline void SetupNightHazards(int currentNight, std::vector<Entity>& entities) {
     }
 
     // 2. NIGHT 4: Nordic Room Setup
-    if (currentNight == 4) {
+    if (currentNight >= 4) {
         for (auto& e : entities) {
             if (e.HasTag(TAG_MJOLNIR)) {
                 e.position.y = 0.0f; // Drop Mjolnir to the floor at shift start
@@ -732,7 +775,7 @@ inline void SetupNightHazards(int currentNight, std::vector<Entity>& entities) {
     }
 
     // 3. NIGHT 5: Boss Room (The Blackout)
-    if (currentNight == 5) {
+    if (currentNight >= 5) {
         for (auto& e : entities) {
             if (e.HasTag(TAG_LIGHTSWITCH)) e.stateValue = 0.0f; // Start in the dark!
         }
