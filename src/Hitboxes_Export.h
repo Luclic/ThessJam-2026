@@ -224,6 +224,15 @@ inline std::unordered_map<std::string, std::vector<BoundingBox>> GetGlobalHitbox
         {"Player", {
             {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
         }},
+        {"Viking Boat", {
+            {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
+        }},
+        {"Shield Round", {
+            {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
+        }},
+        {"Sarcophagus", {
+            {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
+        }},
     };
 }
 
@@ -301,5 +310,8 @@ inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {
         {"Open Book", {100.0, {0.0, 12.0, 0.0}, 0.0}},
         {"Magazine", {50.0, {0.0, 4.0, 0.0}, 0.0}},
         {"Player", {100.0, {0.0, 0.0, 0.0}, 0.0}},
+        {"Viking Boat", {200.0, {0.0, 0.0, 0.0}, 0.0}},
+        {"Shield Round", {60.0, {0.0, 0.0, 0.0}, 0.0}},
+        {"Sarcophagus", {100.0, {0.0, 0.0, 0.0}, 0.0}},
     };
 }

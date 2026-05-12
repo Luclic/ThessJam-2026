@@ -64,3 +64,7 @@ fusebox+lightning models
         }},
 
 {"Player", {100.0, {0.0, 0.0, 0.0}, 0.0}},
+
+add loading screen
+
+add models to main game

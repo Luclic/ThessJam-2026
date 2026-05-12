@@ -297,5 +297,8 @@ inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {
         {"pandora", {25.0, {0.0, 28.0, 0.0}, 0.0}},
         {"Open Book", {100.0, {0.0, 12.0, 0.0}, 0.0}},
         {"Magazine", {50.0, {0.0, 4.0, 0.0}, 0.0}},
+        {"Viking Boat", {200.0, {0.0, 0.0, 0.0}, 0.0}},
+        {"Shield Round", {60.0, {0.0, 0.0, 0.0}, 0.0}},
+        {"Sarcophagus", {100.0, {0.0, 0.0, 0.0}, 0.0}},
     };
 }

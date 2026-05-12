@@ -143,6 +143,23 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Ticket Seat") e.name = "ticketstandseat";
         else if (e.name == "Modern Art Sticker") e.name = "Sticker";
         else if (e.name == "Info Button") { e.isSolid = true; e.name = "Info Button"; }
+
+        // --- NEW FINAL MODELS ---
+        else if (e.name == "Sarcophagus") { 
+            e.name = "sarcophagus"; 
+            e.AddTag(TAG_SARCOPHAGUS); // Adding the tag you already have in Entities.h!
+            e.isSolid = true; 
+        }
+        else if (e.name == "Viking Boat") { 
+            e.name = "Viking Boat"; 
+            e.isSolid = true; 
+            e.isStatic = true; 
+        }
+        else if (e.name == "Shield Round") { 
+            e.name = "Shield Round"; 
+            e.isSolid = true; 
+            e.isStatic = true; 
+        }
         
         // --- THE ULTIMATE BULLETPROOF HITBOX FALLBACK ---
         // If an item was exported with NO hitboxes, it becomes invisible to physics and falls through the floor!
