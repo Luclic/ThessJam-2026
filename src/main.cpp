@@ -31,6 +31,14 @@ Camera2D camera = { 0 };
 std::vector<Entity> entities;
 std::unordered_map<std::string, Model> models;
 
+// --- LIGHTING SYSTEM ---
+struct PointLight {
+    Vector3 position;
+    Vector3 color;  // 0.0f to 1.0f RGB
+    float radius;
+};
+std::vector<PointLight> pointLights;
+
 int grabbedEntityIndex = -1;
 int equippedEyewear = -1; 
 int equippedGloves = -1; 
@@ -107,6 +115,12 @@ int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(1280, 960, "Museum Tech Support");
+
+    Font fontMuseum = LoadFontEx("resources/fonts/Playfair_Display/static/PlayfairDisplay-Bold.ttf", 250, 0, 0);
+    Font fontEmployee = LoadFontEx("resources/fonts/Courier_Prime/CourierPrime-Bold.ttf", 250, 0, 0);
+
+    SetTextureFilter(fontMuseum.texture, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(fontEmployee.texture, TEXTURE_FILTER_BILINEAR);
     
     InitAudioDevice();
     const char* sfxNames[] = {
@@ -128,6 +142,36 @@ int main(void) {
 
     SetTargetFPS(60);
 
+    // ==============================================================
+    // --- SHADER PIPELINE INITIALIZATION ---
+    // ==============================================================
+
+    // Phase 1: Clay Multi-Light Shader
+    Shader clayShader = LoadShader(0, "resources/shaders/clay.fs");
+    
+    // A nice, dark, cool-toned ambient base for the night shift
+    Vector3 ambientColor = { 0.15f, 0.15f, 0.20f }; 
+    SetShaderValue(clayShader, GetShaderLocation(clayShader, "ambientColor"), &ambientColor, SHADER_UNIFORM_VEC3);
+
+    int lightCountLoc = GetShaderLocation(clayShader, "activeLightCount");
+    int lightPosLoc = GetShaderLocation(clayShader, "lightPositions");
+    int lightColLoc = GetShaderLocation(clayShader, "lightColors");
+    int lightRadLoc = GetShaderLocation(clayShader, "lightRadii");
+
+    // Temporarily add a couple of test lights to prove it works before the Editor hooks up!
+    pointLights.push_back({ {300.0f, 150.0f, 300.0f}, {1.0f, 0.9f, 0.7f}, 600.0f }); // Warm light
+    pointLights.push_back({ {1200.0f, 150.0f, 800.0f}, {0.7f, 0.8f, 1.0f}, 800.0f }); // Cool light
+
+    // Phase 3: Screen Post-Processing Shader
+    Shader postShader = LoadShader(0, "resources/shaders/postprocess.fs");
+    Vector3 tintColor = { 1.02f, 0.98f, 0.96f }; 
+    float vignetteStrength = 0.5f;               
+    
+    SetShaderValue(postShader, GetShaderLocation(postShader, "tintColor"), &tintColor, SHADER_UNIFORM_VEC3);
+    SetShaderValue(postShader, GetShaderLocation(postShader, "vignetteStrength"), &vignetteStrength, SHADER_UNIFORM_FLOAT);
+    
+    // ==============================================================
+
     const char* modelNames[] = {
         "artifactsign2", "bench1", "bench2", "bench3", "desk", "fence", "floor11", "floor12", "floor21", "floor22", "floor31", "floor32", "floor41", "floor42", 
         "glasscase", "light1", "light2", "painting1", "painting2", "paintinglight", "pillar1", "pillar2", "rope1", "rope2", "sign1", "sign2", "sign3", 
@@ -148,7 +192,6 @@ int main(void) {
     float animTimer = 0.0f;
     int currentAnimState = 0; 
     
-    // --- NEW: TEXTURES AND MUMMY ANIMATION ---
     Image stoneImg = GenImageColor(2, 2, { 180, 180, 180, 255 }); 
     Texture2D stoneTex = LoadTextureFromImage(stoneImg);
     UnloadImage(stoneImg);
@@ -156,9 +199,22 @@ int main(void) {
     Texture2D zombieTex = LoadTexture("resources/models/ZombieTexture.png");
     
     // Assign textures safely
-    if (models.count("zeus")) models["zeus"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
-    if (models.count("Greek Temple")) models["Greek Temple"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
-    if (models.count("mummy")) models["mummy"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = zombieTex;
+    if (models.count("zeus")) {
+        for (int i = 0; i < models["zeus"].materialCount; i++) models["zeus"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
+    }
+    if (models.count("Greek Temple")) {
+        for (int i = 0; i < models["Greek Temple"].materialCount; i++) models["Greek Temple"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
+    }
+    if (models.count("mummy")) {
+        for (int i = 0; i < models["mummy"].materialCount; i++) models["mummy"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = zombieTex;
+    }
+
+    // Apply the custom clay shader to EVERY model loaded in the game
+    for (auto& pair : models) {
+        for (int i = 0; i < pair.second.materialCount; i++) {
+            pair.second.materials[i].shader = clayShader;
+        }
+    }
 
     // Load Mummy Animations
     int mummyAnimCount = 0;
@@ -388,10 +444,8 @@ int main(void) {
                     if (grabbedEntityIndex != -1) {
                         Entity& item = entities[grabbedEntityIndex];
                         
-                        // --- 1. SHORTER DROP REACH TO PREVENT OVERSHOOTING ---
                         Vector3 dropPos = { player.position.x + player.facingDir.x * 50.0f, player.position.y + 100.0f, player.position.z + player.facingDir.z * 50.0f };
                         
-                        // --- 2. FATTENED SWEEPING DROP COLUMN ---
                         std::vector<BoundingBox> dropColList = item.boundsList; 
                         for (auto& b : dropColList) { 
                             b.min.x += dropPos.x - 15.0f; 
@@ -417,10 +471,8 @@ int main(void) {
                         if (interactTargets.empty()) {
                             float targetY = 0.0f;
                             for(size_t i = 0; i < entities.size(); ++i) {
-                                // Only check against solid entities!
                                 if(i != grabbedEntityIndex && entities[i].isSolid && CheckCollisionLists(dropColList, entities[i].GetWorldBounds())) {
                                     for (const auto& b : entities[i].GetWorldBounds()) { 
-                                        // Ignore the ceiling (Y > 150)
                                         if (b.max.y > targetY && b.max.y < player.position.y + 150.0f) {
                                             targetY = b.max.y; 
                                         }
@@ -428,12 +480,11 @@ int main(void) {
                                 }
                             }
                             
-                            // --- 3. FIX ORIGIN SINKING ---
                             float itemLocalMinY = 0.0f;
                             if (!item.boundsList.empty()) itemLocalMinY = item.boundsList[0].min.y;
                             
                             item.position = dropPos; 
-                            item.position.y = targetY - itemLocalMinY; // Snap to perfectly rest on the surface!
+                            item.position.y = targetY - itemLocalMinY; 
                             
                             if (item.HasTag(TAG_SANDALS)) item.stateTimer = 4.0f;
                             if (item.name.find("sign") != std::string::npos) PlaySound(sounds["plastictap-wetfloors"]);
@@ -501,9 +552,8 @@ int main(void) {
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 
-            // --- FIX: ANIMATE THE MUMMY ---
             if (mummyAnims != nullptr && mummyAnimCount > 0) {
-                mummyAnimTimer += dt * 30.0f; // Speed of the zombie walk
+                mummyAnimTimer += dt * 30.0f; 
                 mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
                 UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
             }
@@ -517,22 +567,59 @@ int main(void) {
                     PlayMusicStream(deathMusic); 
                 }
             }
-        } // END !isOverlayActive PAUSE BLOCK
+        } 
 
-        RenderWorld(renderTarget, camera, dt, entities, player, grabbedEntityIndex, hazVis, models);
+        // --- UPDATE LIGHTS TO SHADER ---
+        float positions[16 * 3] = {0};
+        float colors[16 * 3] = {0};
+        float radii[16] = {0};
+        int count = std::min((int)pointLights.size(), 16);
+
+        for (int i = 0; i < count; i++) {
+            positions[i*3] = pointLights[i].position.x;
+            positions[i*3+1] = pointLights[i].position.y;
+            positions[i*3+2] = pointLights[i].position.z;
+            
+            colors[i*3] = pointLights[i].color.x;
+            colors[i*3+1] = pointLights[i].color.y;
+            colors[i*3+2] = pointLights[i].color.z;
+            
+            radii[i] = pointLights[i].radius;
+        }
+
+        SetShaderValue(clayShader, lightCountLoc, &count, SHADER_UNIFORM_INT);
+        SetShaderValueV(clayShader, lightPosLoc, positions, SHADER_UNIFORM_VEC3, count);
+        SetShaderValueV(clayShader, lightColLoc, colors, SHADER_UNIFORM_VEC3, count);
+        SetShaderValueV(clayShader, lightRadLoc, radii, SHADER_UNIFORM_FLOAT, count);
+
+        RenderWorld(renderTarget, camera, dt, entities, player, grabbedEntityIndex, models, hazVis);
         
         BeginDrawing(); 
         ClearBackground(BLACK);
         float scale = std::min((float)GetScreenWidth() / GAME_WIDTH, (float)GetScreenHeight() / GAME_HEIGHT);
         Rectangle sourceRec = { 0.0f, 0.0f, (float)renderTarget.texture.width, (float)-renderTarget.texture.height };
         Rectangle destRec = { (GetScreenWidth() - ((float)GAME_WIDTH * scale)) * 0.5f, (GetScreenHeight() - ((float)GAME_HEIGHT * scale)) * 0.5f, (float)GAME_WIDTH * scale, (float)GAME_HEIGHT * scale };
+        
+        // ==============================================================
+        // --- DRAW THE 3D WORLD WITH THE POST-PROCESSING SHADER ---
+        // ==============================================================
+        if (currentState != STATE_MENU && currentState != STATE_OPTIONS) {
+            BeginShaderMode(postShader);
+        }
+        
         DrawTexturePro(renderTarget.texture, sourceRec, destRec, { 0, 0 }, 0.0f, WHITE);
+        
+        if (currentState != STATE_MENU && currentState != STATE_OPTIONS) {
+            EndShaderMode();
+        }
+        // ==============================================================
 
+        // The HUD and menus are drawn AFTER the shader mode is ended, so they remain unaffected!
         if (currentState == STATE_MENU || currentState == STATE_OPTIONS) {
-            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart);
+            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart, fontMuseum, fontEmployee); 
             SetMusicVolume(mainMusic, mainMusicVolume); SetMusicVolume(tutorialMusic, mainMusicVolume);
         } else {
-            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities);
+            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities, hazVis);
             
             if (currentState == STATE_TUTORIAL && !isOverlayActive) {
                 bool tutorialFinished = false;
@@ -541,8 +628,8 @@ int main(void) {
             }
 
             if (isOverlayActive && grabbedEntityIndex != -1) {
-                UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep, entities[grabbedEntityIndex].name); 
-            }
+                // We now pass both the name AND the stateValue (which holds the ID)
+                UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep, entities[grabbedEntityIndex].name, entities[grabbedEntityIndex].stateValue);            }
         }
         EndDrawing();
         
@@ -559,10 +646,17 @@ int main(void) {
     if (mummyAnims) UnloadModelAnimations(mummyAnims, mummyAnimCount);
     UnloadTexture(stoneTex);
     UnloadTexture(zombieTex);
+    
+    // Clean up the shader programs from the GPU
+    UnloadShader(clayShader);
+    UnloadShader(postShader);
+    
     for (auto& pair : models) { UnloadModel(pair.second); }
 
     if (isMainMusicLoaded) UnloadMusicStream(mainMusic);
     UnloadMusicStream(tutorialMusic); UnloadMusicStream(deathMusic); UnloadMusicStream(newsMusic); UnloadMusicStream(reviewsMusic); for (auto& pair : sounds) UnloadSound(pair.second); CloseAudioDevice();
-    UnloadRenderTexture(renderTarget); CloseWindow(); 
+    UnloadRenderTexture(renderTarget); 
+    UnloadFont(fontMuseum); UnloadFont(fontEmployee);
+    CloseWindow(); 
     return 0;
 }

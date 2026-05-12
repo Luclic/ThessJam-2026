@@ -147,7 +147,24 @@ int main(void) {
     ModelAnimation* anims = LoadModelAnimations("resources/models/worker.glb", &animCount);
     float animTimer = 0.0f;
     int currentAnimState = 0; 
-        
+    
+    // --- NEW: TEXTURES AND MUMMY ANIMATION ---
+    Image stoneImg = GenImageColor(2, 2, { 180, 180, 180, 255 }); 
+    Texture2D stoneTex = LoadTextureFromImage(stoneImg);
+    UnloadImage(stoneImg);
+
+    Texture2D zombieTex = LoadTexture("resources/models/ZombieTexture.png");
+    
+    // Assign textures safely
+    if (models.count("zeus")) models["zeus"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
+    if (models.count("Greek Temple")) models["Greek Temple"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = stoneTex;
+    if (models.count("mummy")) models["mummy"].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = zombieTex;
+
+    // Load Mummy Animations
+    int mummyAnimCount = 0;
+    ModelAnimation* mummyAnims = LoadModelAnimations("resources/models/mummy.glb", &mummyAnimCount);
+    float mummyAnimTimer = 0.0f;
+
     RenderTexture2D renderTarget = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
@@ -387,7 +404,12 @@ int main(void) {
                         
                         for(size_t i = 0; i < entities.size(); ++i) {
                             if(i != grabbedEntityIndex && CheckCollisionLists(dropColList, entities[i].GetWorldInteractBounds())) {
-                                if (entities[i].name == "stand2" || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { interactTargets.push_back(i); } 
+                                bool isStand = entities[i].name.find("stand") != std::string::npos;
+                                bool isGlitchingSandal = item.HasTag(TAG_SANDALS) && item.isGlitching;
+
+                                if ((isStand && !isGlitchingSandal) || entities[i].HasTag(TAG_ZEUS) || (entities[i].HasTag(TAG_FUSEBOX) && entities[i].stateValue > 0.5f && item.HasTag(TAG_ELECTRIC))) { 
+                                    interactTargets.push_back(i); 
+                                }                                
                                 else if (CanProcessChemistry(grabbedEntityIndex, i, entities) != CHEM_NONE) { interactTargets.push_back(i); }
                             }
                         }
@@ -479,6 +501,13 @@ int main(void) {
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 
+            // --- FIX: ANIMATE THE MUMMY ---
+            if (mummyAnims != nullptr && mummyAnimCount > 0) {
+                mummyAnimTimer += dt * 30.0f; // Speed of the zombie walk
+                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
+                UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
+            }
+
             hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves, currentNight, shiftTimer);
             
             if (currentState == STATE_PLAYING || currentState == STATE_TUTORIAL) {
@@ -527,6 +556,9 @@ int main(void) {
     }
 
     if (anims) UnloadModelAnimations(anims, animCount);
+    if (mummyAnims) UnloadModelAnimations(mummyAnims, mummyAnimCount);
+    UnloadTexture(stoneTex);
+    UnloadTexture(zombieTex);
     for (auto& pair : models) { UnloadModel(pair.second); }
 
     if (isMainMusicLoaded) UnloadMusicStream(mainMusic);

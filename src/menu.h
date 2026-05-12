@@ -2,86 +2,138 @@
 #include "raylib.h"
 #include <algorithm>
 
-inline void UpdateAndRenderMenu(int& currentState, float& mainMusicVolume, bool& triggerShiftStart) {
+template <typename T>
+inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& triggerShiftStart, Font fontMuseum, Font fontEmployee) {
     Vector2 mousePos = GetMousePosition();
-    
-    // Check both pressed and released to ensure we catch fast clicks
     bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
 
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    // Subtle vignette overlay
-    DrawRectangle(0, 0, screenW, screenH, {0, 0, 0, 100});
+    // --- DYNAMIC SCALING MULTIPLIERS ---
+    // Calculate sizes as a percentage of the screen height (mostly) and width
+    float leftMargin = screenW * 0.08f; 
+    float titleY = screenH * 0.15f;
+    float buttonsY = screenH * 0.60f;
 
-    const char* title = "MUSEUM TECH SUPPORT";
-    int titleW = MeasureText(title, 50);
-    DrawText(title, screenW/2 - titleW/2 + 3, screenH/3 - 50 + 3, 50, BLACK); // Drop shadow
-    DrawText(title, screenW/2 - titleW/2, screenH/3 - 50, 50, WHITE);
+    float title1Size = screenH * 0.14f;  // Large title
+    float title2Size = screenH * 0.05f;  // Subtitle
+    float fontSizeBtn = screenH * 0.06f; // Buttons
+    float footerSize = screenH * 0.025f; // Bottom hint text
+
+    float btnHeight = screenH * 0.08f;
+    float btnWidth = screenW * 0.25f;    // Button width scales with screen width
+    float btnSpacing = screenH * 0.03f;
+    float strokeWidth = screenW * 0.003f; // The highlight lines on buttons
+
+    // --- UI BACKDROP ---
+    DrawRectangleGradientH(0, 0, screenW * 0.50f, screenH, Fade(BLACK, 0.8f), BLANK);
+    
+    Color warningOrange = { 255, 150, 0, 255 }; 
 
     if (currentState == 0) { // STATE_MENU
         
-        // --- KEYBOARD FALLBACK ---
         if (IsKeyPressed(KEY_ENTER)) {
             triggerShiftStart = true;
         }
 
-        // --- START BUTTON ---
-        // Made the button slightly taller (60) to ensure easy clicking
-        Rectangle startBtn = { (float)screenW/2 - 150, (float)screenH/2, 300, 60 };
+        // --- TITLE: MYTHIC ---
+        const char* title1 = "Mythic";
+        Vector2 title1Pos = { leftMargin, titleY };
+        Vector2 title1Shadow = { leftMargin + (screenW * 0.003f), titleY + (screenH * 0.005f) };
+        
+        DrawTextEx(fontMuseum, title1, title1Shadow, title1Size, 2, Fade(BLACK, 0.8f));
+        DrawTextEx(fontMuseum, title1, title1Pos, title1Size, 2, RAYWHITE);
+
+        // --- TITLE: MAINTENANCE ---
+        const char* title2 = "MAINTENANCE";
+        Vector2 title2Pos = { leftMargin + (screenW * 0.01f), titleY + title1Size - (screenH * 0.02f) };
+        Vector2 title2Shadow = { title2Pos.x + (screenW * 0.002f), title2Pos.y + (screenH * 0.003f) };
+        
+        Vector2 title2Dims = MeasureTextEx(fontEmployee, title2, title2Size, 0);
+        float padding = screenH * 0.01f;
+        DrawRectangle(title2Pos.x - padding, title2Pos.y + padding, title2Dims.x + (padding*2), title2Dims.y - (padding*2), Fade(BLACK, 0.7f));
+        
+        DrawTextEx(fontEmployee, title2, title2Shadow, title2Size, 0, Fade(BLACK, 0.9f));
+        DrawTextEx(fontEmployee, title2, title2Pos, title2Size, 0, warningOrange);
+
+        // --- BUTTONS ---
+        
+        // START BUTTON
+        Rectangle startBtn = { leftMargin, buttonsY, btnWidth, btnHeight };
         bool startHover = CheckCollisionPointRec(mousePos, startBtn);
         
-        // Debug border: If you don't see this box around the text, your screen scaling is off!
-        DrawRectangleLinesEx(startBtn, 2, startHover ? GREEN : Fade(LIGHTGRAY, 0.3f));
-
-        Color startColor = startHover ? GREEN : LIGHTGRAY;
-        DrawText("START SHIFT", screenW/2 - MeasureText("START SHIFT", 30)/2, startBtn.y + 15, 30, startColor);
-        
-        if (startHover && clicked) {
-            triggerShiftStart = true; 
+        if (startHover) {
+            DrawRectangleRec({startBtn.x - (padding*2), startBtn.y, startBtn.width, startBtn.height}, Fade(warningOrange, 0.2f));
+            DrawRectangleRec({startBtn.x - (padding*2), startBtn.y, strokeWidth, startBtn.height}, warningOrange);
         }
+        
+        Color startColor = startHover ? RAYWHITE : LIGHTGRAY;
+        DrawTextEx(fontMuseum, "Start Shift", { startBtn.x, startBtn.y }, fontSizeBtn, 1, startColor);
+        
+        if (startHover && clicked) triggerShiftStart = true; 
 
-        // --- OPTIONS BUTTON ---
-        Rectangle optBtn = { (float)screenW/2 - 150, (float)screenH/2 + 80, 300, 60 };
+        // OPTIONS BUTTON
+        Rectangle optBtn = { leftMargin, buttonsY + btnHeight + btnSpacing, btnWidth, btnHeight };
         bool optHover = CheckCollisionPointRec(mousePos, optBtn);
         
-        DrawRectangleLinesEx(optBtn, 2, optHover ? SKYBLUE : Fade(LIGHTGRAY, 0.3f));
-
-        Color optColor = optHover ? SKYBLUE : LIGHTGRAY;
-        DrawText("OPTIONS", screenW/2 - MeasureText("OPTIONS", 30)/2, optBtn.y + 15, 30, optColor);
-        
-        if (optHover && clicked) {
-            currentState = 1; // STATE_OPTIONS
+        if (optHover) {
+            DrawRectangleRec({optBtn.x - (padding*2), optBtn.y, optBtn.width, optBtn.height}, Fade(SKYBLUE, 0.2f));
+            DrawRectangleRec({optBtn.x - (padding*2), optBtn.y, strokeWidth, optBtn.height}, SKYBLUE);
         }
-        
-        DrawText("Press ENTER to Start | Use WASD to run around the lobby!", 15, screenH - 30, 16, GRAY);
-    } 
-    else if (currentState == 1) { // STATE_OPTIONS
-        const char* optTitle = "- OPTIONS -";
-        DrawText(optTitle, screenW/2 - MeasureText(optTitle, 30)/2, screenH/2 - 40, 30, LIGHTGRAY);
 
-        const char* volText = TextFormat("Main Volume: %d%%", (int)(mainMusicVolume * 100));
-        DrawText(volText, screenW/2 - MeasureText(volText, 25)/2, screenH/2 + 20, 25, YELLOW);
+        Color optColor = optHover ? RAYWHITE : LIGHTGRAY;
+        DrawTextEx(fontMuseum, "Options", { optBtn.x, optBtn.y }, fontSizeBtn, 1, optColor);
         
-        Rectangle volDown = { (float)screenW/2 - MeasureText(volText, 25)/2 - 50, (float)screenH/2 + 15, 40, 40 };
+        if (optHover && clicked) currentState = (T)1; 
+        
+        // FOOTER
+        DrawTextEx(fontEmployee, "Press ENTER to Start | WASD to move", { leftMargin, (float)screenH - (screenH * 0.05f) }, footerSize, 0, GRAY);
+    } 
+    else if (currentState == (T)1) { // STATE_OPTIONS
+        
+        float optTitleSize = screenH * 0.09f;
+        const char* optTitle = "Options";
+        Vector2 optTitleDims = MeasureTextEx(fontMuseum, optTitle, optTitleSize, 2);
+        DrawTextEx(fontMuseum, optTitle, { screenW/2.0f - optTitleDims.x/2.0f, screenH * 0.25f }, optTitleSize, 2, RAYWHITE);
+
+        float volTextSize = screenH * 0.045f;
+        const char* volText = TextFormat("Main Volume: %d%%", (int)(mainMusicVolume * 100));
+        Vector2 volDims = MeasureTextEx(fontEmployee, volText, volTextSize, 0);
+        float volY = screenH/2.0f - (screenH * 0.02f);
+        DrawTextEx(fontEmployee, volText, { screenW/2.0f - volDims.x/2.0f, volY }, volTextSize, 0, warningOrange);
+        
+        // Volume Controls
+        float ctrlSize = screenH * 0.05f;
+        Rectangle volDown = { screenW/2.0f - volDims.x/2.0f - (screenW * 0.05f), volY - (screenH * 0.005f), ctrlSize, ctrlSize };
         bool downHover = CheckCollisionPointRec(mousePos, volDown);
-        DrawRectangleLinesEx(volDown, 2, downHover ? WHITE : Fade(GRAY, 0.5f));
-        DrawText("<", volDown.x + 10, volDown.y + 5, 30, downHover ? WHITE : GRAY);
+        DrawRectangleLinesEx(volDown, 2, downHover ? warningOrange : Fade(GRAY, 0.5f));
+        // Centering the < and > inside the boxes dynamically
+        Vector2 arrowDownDims = MeasureTextEx(fontEmployee, "<", volTextSize, 0);
+        DrawTextEx(fontEmployee, "<", { volDown.x + (ctrlSize/2) - (arrowDownDims.x/2), volDown.y + (ctrlSize/2) - (arrowDownDims.y/2) }, volTextSize, 0, downHover ? warningOrange : GRAY);
         if (downHover && clicked) mainMusicVolume = std::max(0.0f, mainMusicVolume - 0.1f);
 
-        Rectangle volUp = { (float)screenW/2 + MeasureText(volText, 25)/2 + 10, (float)screenH/2 + 15, 40, 40 };
+        Rectangle volUp = { screenW/2.0f + volDims.x/2.0f + (screenW * 0.02f), volY - (screenH * 0.005f), ctrlSize, ctrlSize };
         bool upHover = CheckCollisionPointRec(mousePos, volUp);
-        DrawRectangleLinesEx(volUp, 2, upHover ? WHITE : Fade(GRAY, 0.5f));
-        DrawText(">", volUp.x + 10, volUp.y + 5, 30, upHover ? WHITE : GRAY);
+        DrawRectangleLinesEx(volUp, 2, upHover ? warningOrange : Fade(GRAY, 0.5f));
+        Vector2 arrowUpDims = MeasureTextEx(fontEmployee, ">", volTextSize, 0);
+        DrawTextEx(fontEmployee, ">", { volUp.x + (ctrlSize/2) - (arrowUpDims.x/2), volUp.y + (ctrlSize/2) - (arrowUpDims.y/2) }, volTextSize, 0, upHover ? warningOrange : GRAY);
         if (upHover && clicked) mainMusicVolume = std::min(1.0f, mainMusicVolume + 0.1f);
 
-        Rectangle backBtn = { (float)screenW/2 - 150, (float)screenH/2 + 100, 300, 60 };
+        // BACK BUTTON
+        float backBtnW = screenW * 0.15f;
+        Rectangle backBtn = { screenW/2.0f - backBtnW/2.0f, screenH/2.0f + (screenH * 0.1f), backBtnW, btnHeight };
         bool backHover = CheckCollisionPointRec(mousePos, backBtn);
         
-        DrawRectangleLinesEx(backBtn, 2, backHover ? RED : Fade(LIGHTGRAY, 0.3f));
+        if (backHover) {
+            DrawRectangleRec({backBtn.x - (screenW * 0.01f), backBtn.y, strokeWidth, backBtn.height}, RED);
+            DrawRectangleRec(backBtn, Fade(RED, 0.2f));
+        }
 
-        Color backColor = backHover ? RED : LIGHTGRAY;
-        DrawText("BACK", screenW/2 - MeasureText("BACK", 30)/2, backBtn.y + 15, 30, backColor);
-        if (backHover && clicked) currentState = 0; 
+        Color backColor = backHover ? RAYWHITE : LIGHTGRAY;
+        Vector2 backDims = MeasureTextEx(fontMuseum, "Return", fontSizeBtn, 1);
+        DrawTextEx(fontMuseum, "Return", { screenW/2.0f - backDims.x/2.0f, backBtn.y }, fontSizeBtn, 1, backColor);
+        
+        if (backHover && clicked) currentState = (T)0; 
     }
 }

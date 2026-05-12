@@ -52,7 +52,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Fire Extinguisher") { e.AddTag(TAG_EXTINGUISHER); e.canGrab = true; e.canThrow = true; e.name = "Fire Extinguisher"; }
         else if (e.name == "Flashlight") { e.AddTag(TAG_FLASHLIGHT); e.canGrab = true; e.name = "Time Hotel 7.07"; }
         else if (e.name == "Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Sunglasses"; }
-        else if (e.name == "Pixel Glasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Pixel Sunglasses"; }
+        else if (e.name == "Pixel Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Pixel Sunglasses"; }
         else if (e.name == "Glove") { e.AddTag(TAG_GLOVES); e.canGrab = true; e.name = "Glove"; }
         else if (e.name == "Painters Tape") { e.AddTag(TAG_TAPE); e.stateValue = 10.0f; e.canGrab = true; e.name = "Time Hotel 5.25 Painters Tape"; }
         else if (e.name == "Sponge") { e.AddTag(TAG_SPONGE); e.canGrab = true; e.name = "Sponge"; }

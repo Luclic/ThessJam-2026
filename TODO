@@ -39,3 +39,6 @@ Mythic Maintenance
 
 
 fonts: courrier prime for employee handbook, Playfair Display for museum stuff, inter for online stuff
+
+
+mummy has limbs glitching on animation, need to fix on blender (something to do with max something per something limit is 4 on raylib.)

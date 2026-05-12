@@ -6,28 +6,21 @@
 #include "GameSystems.h"
 #include "Hitboxes_Export.h" // This provides GetGlobalTweaks() and ModelTweak!
 #include <vector>
+#include <string>
 #include <algorithm>
 #include <unordered_map>
-#include <string>
 
 inline Color DarkenColor(Color c, float amount) { return { (unsigned char)(c.r - c.r*amount), (unsigned char)(c.g - c.g*amount), (unsigned char)(c.b - c.b*amount), c.a }; }
 
-inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt, const std::vector<Entity>& entities, const Entity& player, int grabbedEntityIndex, const HazardVisuals& hazVis, const std::unordered_map<std::string, Model>& models) {
+inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt, const std::vector<Entity>& entities, const Entity& player, int grabbedEntityIndex, const std::unordered_map<std::string, Model>& models, const HazardVisuals& hazVis) {
     int currentRoomX = (int)std::floor((player.position.x) / GAME_WIDTH); 
     int currentRoomY = (int)std::floor((player.position.z) / GAME_HEIGHT); 
     camera.target.x += (currentRoomX * GAME_WIDTH - camera.target.x) * 5.0f * dt; 
     camera.target.y += (currentRoomY * GAME_HEIGHT - camera.target.y) * 5.0f * dt;
 
-    std::vector<Entity*> renderList; 
+    std::vector<const Entity*> renderList; 
     for (auto& e : const_cast<std::vector<Entity>&>(entities)) renderList.push_back(&e);
     std::sort(renderList.begin(), renderList.end(), [](const Entity* a, const Entity* b) { return (a->position.y + (a->isGrabbed ? 0.1f : 0.0f)) < (b->position.y + (b->isGrabbed ? 0.1f : 0.0f)); });
-
-    BeginTextureMode(renderTarget); 
-    ClearBackground({35, 35, 40, 255}); 
-    
-    BeginMode2D(camera);
-    for (int i = -4000; i < 8000; i += 200) { DrawLine(i, -4000, i, 8000, {55, 55, 60, 255}); DrawLine(-4000, i, 8000, i, {55, 55, 60, 255}); }
-    EndMode2D();
 
     Camera3D cam3D = { 0 };
     cam3D.position = (Vector3){ (camera.target.x + 50) + GAME_WIDTH/2.0f, 1300.0f, camera.target.y + GAME_HEIGHT/2.0f + 700.0f }; 
@@ -36,32 +29,131 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     cam3D.fovy = 50.0f; 
     cam3D.projection = CAMERA_PERSPECTIVE;
 
+    // =========================================================================================
+    // --- PHASE 2: SHADOW MAPPING SETUP ---
+    // =========================================================================================
+    static RenderTexture2D shadowMap = { 0 };
+    static Shader depthShader = { 0 };
+    static Shader clayShader = { 0 }; // NEW: We must cache your beautiful shader!
+    static bool isShadowMapInit = false;
+
+    if (!isShadowMapInit) {
+        shadowMap = LoadRenderTexture(2048, 2048); 
+        depthShader = LoadShader(0, 0); 
+        depthShader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(depthShader, "mvp");
+        
+        // CACHE THE CLAY SHADER SO WE DON'T LOSE IT!
+        if (!models.empty()) clayShader = models.begin()->second.materials[0].shader;
+        
+        isShadowMapInit = true;
+    }
+
+    // 1. Setup the Sun's "Camera"
+    Camera3D lightCam = { 0 };
+    // The sun sits high above the current room and slightly to the left/front
+    lightCam.position = (Vector3){ cam3D.target.x - 1000.0f, 2500.0f, cam3D.target.y - 1000.0f }; 
+    lightCam.target = cam3D.target;
+    lightCam.up = (Vector3){ 0.0f, 1.0f, 0.0f };
+    lightCam.fovy = 90.0f; // Wide angle to capture the whole room
+    lightCam.projection = CAMERA_ORTHOGRAPHIC; // Orthographic makes sunlight parallel!
+
+    // 2. Calculate the Light Space Matrix (Projection * View)
+    Matrix lightView = MatrixLookAt(lightCam.position, lightCam.target, lightCam.up);
+    // --- FIX 4: TIGHTEN ORTHO BOUNDS FOR HIGHER RESOLUTION SHADOWS ---
+    Matrix lightProj = MatrixOrtho(-900, 900, -900, 900, 100, 5000); 
+    Matrix lightSpaceMatrix = MatrixMultiply(lightView, lightProj);
+
+    auto globalTweaks = GetGlobalTweaks();
+
+    // =========================================================================================
+    // PASS 1: DRAW TO THE SHADOW MAP
+    // =========================================================================================
+    BeginTextureMode(shadowMap);
+    ClearBackground(WHITE); // White means "maximum distance" (no shadow)
+    BeginMode3D(lightCam);
+    
+    // We temporarily override the default shader to just record geometry depth
+    for (const Entity* e : renderList) {
+        if (e->color.a < 255 || e->HasTag(TAG_WATER_SOURCE)) continue; // Don't cast shadows for invisible or flat puddle objects
+        
+        std::string baseName = GetBaseModelName(e->name);
+        auto modIt = models.find(e->name); 
+        if (modIt != models.end()) {
+            ModelTweak tweak = globalTweaks[baseName];
+            float rotationAngle = (!e->HasTag(TAG_BANSHEE_STONE)) ? e->stateValue : 0.0f;
+            float rad = rotationAngle * DEG2RAD;
+            Vector3 rotatedOffset = { tweak.offset.x * cos(rad) + tweak.offset.z * sin(rad), tweak.offset.y, -tweak.offset.x * sin(rad) + tweak.offset.z * cos(rad) };
+            Vector3 pos3D = Vector3Add(e->position, rotatedOffset);
+            
+            // Force the model to draw with the depth shader for this pass
+            for (int i = 0; i < modIt->second.materialCount; i++) modIt->second.materials[i].shader = depthShader;
+            DrawModelEx(modIt->second, pos3D, {0, 1, 0}, tweak.rot + rotationAngle, (Vector3){tweak.scale, tweak.scale, tweak.scale}, WHITE);
+        } else {
+            // Draw placeholder cubes into the shadow map
+            std::vector<BoundingBox> projected = e->GetWorldBounds();
+            for(const auto& b : projected) {
+                Vector3 size = { b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z };
+                if (size.x > 0 && size.y > 0 && size.z > 0) {
+                    Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
+                    DrawCubeV(center, size, WHITE);
+                }
+            }
+        }
+    }
+    EndMode3D();
+    EndTextureMode();
+
+    // =========================================================================================
+    // PASS 2: RENDER THE ACTUAL GAME WORLD
+    // =========================================================================================
+    
+    // Send the Light Space Matrix to our safely cached clayShader!
+    int lightSpaceMatLoc = GetShaderLocation(clayShader, "lightSpaceMatrix");
+    SetShaderValueMatrix(clayShader, lightSpaceMatLoc, lightSpaceMatrix);
+
     std::vector<std::pair<Vector2, std::string>> floatingTexts;
+
+    BeginTextureMode(renderTarget); 
+    ClearBackground({35, 35, 40, 255}); 
+    
+    BeginMode2D(camera);
+    for (int i = -4000; i < 8000; i += 200) { DrawLine(i, -4000, i, 8000, {55, 55, 60, 255}); DrawLine(-4000, i, 8000, i, {55, 55, 60, 255}); }
+    EndMode2D();
 
     BeginMode3D(cam3D);
     Vector2 camCenter = { camera.target.x + GAME_WIDTH/2.0f, camera.target.y + GAME_HEIGHT/2.0f };
     
-    // Fetch the tweaks exported from your editor!
-    auto globalTweaks = GetGlobalTweaks();
-
     for (const Entity* e : renderList) {
         if (e->color.a < 255) continue; 
         if (Vector2Distance({e->position.x, e->position.z}, camCenter) > 2500.0f) continue;
 
         std::string baseName = GetBaseModelName(e->name);
-        auto modIt = models.find(e->name); // Still load the specific color model!
+        auto modIt = models.find(e->name); 
         if (modIt != models.end()) {
             ModelTweak tweak = globalTweaks[baseName];
-            float rad = e->stateValue * DEG2RAD;
+
+            float rotationAngle = 0.0f;
+            if (!e->HasTag(TAG_BANSHEE_STONE) && !e->HasTag(TAG_WATER_SOURCE)) {
+                rotationAngle = e->stateValue; 
+            }
+
+            float rad = rotationAngle * DEG2RAD;
             float cosR = cos(rad); float sinR = sin(rad);
             Vector3 rotatedOffset = { tweak.offset.x * cosR + tweak.offset.z * sinR, tweak.offset.y, -tweak.offset.x * sinR + tweak.offset.z * cosR };
             Vector3 pos3D = Vector3Add(e->position, rotatedOffset);
-            float finalRot = tweak.rot + e->stateValue; 
+            float finalRot = tweak.rot + rotationAngle; 
+
+            // --- THE MISSING FIX: ACTUALLY RESTORE THE SHADER! ---
+            for (int i = 0; i < modIt->second.materialCount; i++) {
+                modIt->second.materials[i].shader = clayShader;
+            }
             
-            // ✅ REPLACE WITH:
+            // Bind the shadow map texture to the shader just before drawing!
+            SetShaderValueTexture(clayShader, GetShaderLocation(clayShader, "shadowMap"), shadowMap.texture);
+
             Vector3 finalScale = (Vector3){tweak.scale, tweak.scale, tweak.scale};
             DrawModelEx(modIt->second, pos3D, {0, 1, 0}, finalRot, finalScale, WHITE);
-        } else {
+            } else {
             // PLACEHOLDER SYSTEM
             Color drawCol = e->color;
             std::vector<BoundingBox> projected = e->GetWorldBounds();
@@ -73,37 +165,25 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
                     DrawCubeV(center, size, Fade(drawCol, 0.8f));
                     DrawCubeWiresV(center, size, BLACK);
                     
-                    // NEW: Capture the 2D screen coordinate for the text!
-                    // NEW: Only draw text if the object is IN FRONT of the camera!
                     Vector3 toObj = Vector3Subtract(center, cam3D.position);
                     Vector3 camForward = Vector3Subtract(cam3D.target, cam3D.position);
                     if (Vector3DotProduct(toObj, camForward) > 0.0f) {
                         floatingTexts.push_back({ GetWorldToScreenEx({center.x, b.max.y + 20.0f, center.z}, cam3D, renderTarget.texture.width, renderTarget.texture.height), e->name });
-                    }                }
+                    }                
+                }
             }
         }
 
-        // --- NEW CONCENTRIC PUDDLE RENDERER (PERFORMANCE & VISUAL FIX) ---
+        // --- CONCENTRIC PUDDLE RENDERER ---
         if (e->HasTag(TAG_WATER_SOURCE) && e->stateValue > 0.0f) {
             float radius = e->stateValue;
-            float timeSec = (float)GetTime();
-
-            // 1. Draw Concentric 2D Rings (layered slightly on Y-axis to prevent Z-fighting)
-            
-            // Outer Ring - Shallow Water (Light Blue, Highly Transparent)
             DrawCylinder({e->position.x, 50.0f, e->position.z}, radius, radius, 0.1f, 24, {0, 150, 255, 80});
             
-            // Middle Ring - Deepening Water (Medium Blue)
-            float midRadius = radius * 0.9f; // 70% of total size
-            if (midRadius > 0) {
-                DrawCylinder({e->position.x, 55.0f, e->position.z}, midRadius, midRadius, 0.1f, 24, {0, 100, 200, 140});
-            }
+            float midRadius = radius * 0.9f; 
+            if (midRadius > 0) DrawCylinder({e->position.x, 55.0f, e->position.z}, midRadius, midRadius, 0.1f, 24, {0, 100, 200, 140});
 
-            // Inner Ring - Deep Water (Dark Ocean Blue)
-            float innerRadius = radius * 0.85f; // 40% of total size
-            if (innerRadius > 0) {
-                DrawCylinder({e->position.x, 60.0f, e->position.z}, innerRadius, innerRadius, 0.1f, 24, {0, 50, 150, 200});
-            }
+            float innerRadius = radius * 0.85f; 
+            if (innerRadius > 0) DrawCylinder({e->position.x, 60.0f, e->position.z}, innerRadius, innerRadius, 0.1f, 24, {0, 50, 150, 200});
         }
         // -----------------------------------------------------------------
 
@@ -116,26 +196,21 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
             DrawTriangle3D(e->position, fl2, fl3, { 255, 255, 200, 100 }); DrawTriangle3D(e->position, fl3, fl2, { 255, 255, 200, 100 }); 
         }
 
-        // Draw Tape if the Wind Bag is sealed
-        if (e->HasTag(TAG_WIND_BAG) && e->HasTag(TAG_BROKEN)) {
-            DrawCubeWiresV(e->position, {60, 20, 60}, GRAY); 
-        }
+        if (e->HasTag(TAG_WIND_BAG) && e->HasTag(TAG_BROKEN)) DrawCubeWiresV(e->position, {60, 20, 60}, GRAY); 
 
-        // Draw Zeus Lightning Sparks
         if (e->HasTag(TAG_ZEUS) && e->isGlitching) {
-            if ((int)(GetTime() * 10) % 2 == 0) { // Flickers every other frame
-                DrawSphereWires({e->position.x, e->position.y + 40.0f, e->position.z}, 60.0f, 4, 4, YELLOW);
-            }
+            if ((int)(GetTime() * 10) % 2 == 0) DrawSphereWires({e->position.x, e->position.y + 40.0f, e->position.z}, 60.0f, 4, 4, YELLOW);
         }
     }
 
     if (hazVis.drawingBeam) { DrawTriangle3D(hazVis.beamP1, hazVis.beamP2, hazVis.beamP3, { 0, 255, 0, 80 }); DrawTriangle3D(hazVis.beamP1, hazVis.beamP3, hazVis.beamP2, { 0, 255, 0, 80 }); }
     if (hazVis.drawingExtinguisher) { DrawTriangle3D(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); DrawTriangle3D(hazVis.extP1, hazVis.extP3, hazVis.extP2, { 255, 255, 255, 150 }); }
     EndMode3D();
-    // NEW: Draw all the saved floating text over the 3D scene
+
     for(const auto& ft : floatingTexts) {
         DrawText(ft.second.c_str(), ft.first.x - MeasureText(ft.second.c_str(), 20)/2, ft.first.y, 20, RAYWHITE);
     }
+
     BeginMode2D(camera);
     for (const auto& e : entities) {
         if (e.HasTag(TAG_LIGHTSWITCH) && e.stateValue < 0.5f) {
@@ -149,7 +224,7 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     EndTextureMode();
 }
 
-inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float secondsPerHour, int currentNight, const Entity& player, bool showInteractMenu, bool isDropMenu, const std::vector<int>& interactTargets, int interactSelectedIndex, const std::vector<Entity>& entities) {
+inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float secondsPerHour, int currentNight, const Entity& player, bool showInteractMenu, bool isDropMenu, const std::vector<int>& interactTargets, int interactSelectedIndex, const std::vector<Entity>& entities, const HazardVisuals& hazVis) {
     ClearBackground(BLACK);
     float scale = std::min((float)GetScreenWidth() / GAME_WIDTH, (float)GetScreenHeight() / GAME_HEIGHT);
     Rectangle sourceRec = { 0.0f, 0.0f, (float)renderTarget.texture.width, (float)-renderTarget.texture.height };
@@ -168,9 +243,20 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
     if (player.isStone) DrawText("PETRIFIED!", 10, 40, 30, RED);
     if (player.isDead) DrawText("ZAPPED TO DEATH!", 10, 70, 30, ORANGE);
 
-    for (const auto& e : entities) {
-        if (e.isGrabbed && (e.HasTag(TAG_TAPE) || e.HasTag(TAG_BUBBLE_WRAP))) {
-            DrawText(TextFormat("%s USES LEFT: %d", e.name.c_str(), (int)e.stateValue), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (e.stateValue > 0) ? GREEN : RED);
+    // --- PANDORA WARNING TEXT ---
+    if (hazVis.pandoraWarning) {
+        int textWidth = MeasureText("WARNING: PANDORA'S BOX IS OPEN", 40);
+        DrawText("WARNING: PANDORA'S BOX IS OPEN", (GetScreenWidth() - textWidth) / 2, 20, 40, RED);
+        
+        // Optional sub-text to remind the player how to close it!
+        const char* subText = "SEAL IT WITH ANY TWO: DUCT TAPE, MJOLNIR, GLEIPNIR";
+        DrawText(subText, (GetScreenWidth() - MeasureText(subText, 20)) / 2, 65, 20, ORANGE);
+    }
+    // ----------------------------
+
+    for (const auto& ent : entities) {
+        if (ent.isGrabbed && (ent.HasTag(TAG_TAPE) || ent.HasTag(TAG_BUBBLE_WRAP))) {
+            DrawText(TextFormat("%s USES LEFT: %d", ent.name.c_str(), (int)ent.stateValue), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (ent.stateValue > 0) ? GREEN : RED);
         }
     }
 
