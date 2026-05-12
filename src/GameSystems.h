@@ -32,39 +32,23 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         }
     }
 
-    static bool e_start = false, e_15s = false, e_30s = false, e_90s = false;
-    if (shiftTimer < 0.1f) { e_start = false; e_15s = false; e_30s = false; e_90s = false; }
+    static bool e_start = false;
+    if (shiftTimer < 0.1f) { e_start = false; }
 
     if (!e_start && shiftTimer >= 0.1f) {
         e_start = true;
-        if (currentNight >= 2) for(auto& e: entities) if(e.HasTag(TAG_BOULDER)) e.isGlitching = true;
-        if (currentNight >= 3) for(auto& e: entities) { if(e.HasTag(TAG_MUMMY) || e.HasTag(TAG_ZEUS)) e.isGlitching = true; }
-        if (currentNight >= 4) for(auto& e: entities) if(e.HasTag(TAG_BANSHEE_STONE)) { e.isGlitching = true; e.stateValue = 0.0f; }
-        if (currentNight >= 5) { 
+        if (currentNight == 4) {
             for(auto& e: entities) {
-                if (e.HasTag(TAG_PANDORA) || e.HasTag(TAG_BOULDER) || e.HasTag(TAG_MUMMY) || 
-                    e.HasTag(TAG_ZEUS) || e.HasTag(TAG_BANSHEE_STONE) || e.HasTag(TAG_MEDUSA) || 
-                    e.HasTag(TAG_SANDALS) || e.HasTag(TAG_WATER_SOURCE) || e.HasTag(TAG_WIND_BAG) || 
-                    e.HasTag(TAG_SUN_DISK) || e.HasTag(TAG_GLEIPNIR)) { e.isGlitching = true; }
-                if (e.HasTag(TAG_WIND_BAG) || e.HasTag(TAG_MEDUSA)) e.isGlitching = false;
+                if (e.HasTag(TAG_BANSHEE_STONE)) { e.stateValue = 0.0f; }
+                if (e.HasTag(TAG_MJOLNIR)) {
+                    e.attachedTo = -1;         
+                    e.position.y = 0.0f;       
+                    e.position.x += 400.0f;    
+                    e.position.z += 400.0f;
+                    e.canGrab = false;         
+                }
             }
-        } 
-    }
-    
-    if (!e_15s && shiftTimer >= 15.0f) {
-        e_15s = true;
-        if (currentNight >= 1 && currentNight < 5) for(auto& e: entities) if(e.HasTag(TAG_MEDUSA) && e.position.y > -50.0f) e.isGlitching = true;
-    }
-    if (!e_30s && shiftTimer >= 30.0f) {
-        e_30s = true;
-        if (currentNight >= 2 && currentNight < 5) for(auto& e: entities) if(e.HasTag(TAG_SANDALS) && e.position.y > -50.0f) e.isGlitching = true;
-    }
-    if (!e_90s && shiftTimer >= 90.0f) {
-        e_90s = true;
-        if (currentNight >= 1 && currentNight < 5) for(auto& e: entities) if(e.HasTag(TAG_WATER_SOURCE) && e.position.y > -50.0f) e.isGlitching = true;
-        if (currentNight >= 2 && currentNight < 5) for(auto& e: entities) if(e.HasTag(TAG_WIND_BAG) && e.position.y > -50.0f) e.isGlitching = true;
-        if (currentNight >= 3 && currentNight < 5) for(auto& e: entities) if(e.HasTag(TAG_SUN_DISK) && e.position.y > -50.0f) e.isGlitching = true;
-        if (currentNight >= 4 && currentNight < 5) for(auto& e: entities) if(e.HasTag(TAG_GLEIPNIR) && e.position.y > -50.0f) e.isGlitching = true;
+        }
     }
 
     // ---------------------------------------------------------
@@ -72,7 +56,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
     // ---------------------------------------------------------
     for (size_t i = 0; i < entities.size(); ++i) {
         Entity& e = entities[i];
-        bool skipPhysics = false; // Prevents gravity/friction from applying to held/attached items
+        bool skipPhysics = false; 
 
         // --- PHASE A: TRANSFORMS & ATTACHMENTS ---
         if ((int)i == grabbedEntityIndex || (int)i == equippedEyewear || (int)i == equippedGloves || e.attachedTo != -1) {
@@ -108,14 +92,12 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             else if (parent.HasTag(TAG_MEDUSA)) {
                 float parentHeight = parent.boundsList.empty() ? 40.0f : parent.boundsList[0].max.y;
                 e.position.y = parent.position.y + parentHeight - localMinY - 25.0f; 
-                
-                // Medusa Dynamic Glasses Rotation & Offset
                 float rad = parent.stateValue * DEG2RAD;
                 e.position.x += sin(rad) * 12.0f; 
                 e.position.z += cos(rad) * 12.0f; 
                 e.stateValue = parent.stateValue; 
             }
-            else { // FALLBACK
+            else { 
                 float parentHeight = parent.boundsList.empty() ? 10.0f : parent.boundsList[0].max.y;
                 e.position.y = parent.position.y + parentHeight - localMinY; 
             }
@@ -123,13 +105,11 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             e.velocity = {0,0,0}; skipPhysics = true;
         }
         else if ((int)i == equippedEyewear) {
-            // Player Dynamic Glasses Rotation & Offset
             float rad = player.stateValue * DEG2RAD;
             e.position.x = player.position.x + sin(rad) * 12.0f; 
             e.position.y = player.position.y + 135.0f; 
             e.position.z = player.position.z + cos(rad) * 12.0f;
             e.stateValue = player.stateValue; 
-            
             e.velocity = {0,0,0}; skipPhysics = true; 
         }
         else if ((int)i == equippedGloves) {
@@ -231,7 +211,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         } // End Physics Phase
 
-        // --- PHASE C: ENTITY HAZARD LOGIC (Runs even if skipPhysics == true) ---
+        // --- PHASE C: CONTINUOUS HAZARD LOGIC & REACTIVATION ---
         
         if (e.HasTag(TAG_PANDORA) && e.isGlitching) {
             int sealCount = 0;
@@ -246,41 +226,121 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             if (sealCount >= 2) { e.isGlitching = false; isPandoraOpen = false; }
         }
 
-        if (e.HasTag(TAG_SANDALS)) {
-            // 1. Grace Period: Reset the 5-second timer while the player is holding them
-            if (e.isGrabbed && e.isGlitching) {
-                e.stateTimer = 5.0f; 
-            } 
-            // 2. Flight Logic
-            else if (e.isGlitching && !e.isStone) {
-                if (e.stateTimer > 0.0f) {
-                    // Countdown while sitting on a pedestal or the floor
-                    e.stateTimer -= dt; 
+        // DYNAMIC EVALUATION: Medusa
+        if (e.HasTag(TAG_MEDUSA)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 1 && shiftTimer >= 15.0f) || (currentNight > 1);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen) {
+                    e.isGlitching = false;
                 } else {
-                    // BREAK FREE from pedestals!
-                    e.attachedTo = -1; 
-                    
-                    float timeSec = (float)GetTime();
-                    e.position.y = 70.0f + sinf(timeSec * 4.0f) * 15.0f; 
-                    e.velocity.x = cosf(timeSec * 0.5f) * 500.0f;
-                    e.velocity.z = sinf(timeSec * 0.35f) * 500.0f;
-                }
-            }
-            
-            // 3. Water Interaction: Short-circuit if they fly/drop into a puddle!
-            if (e.isGlitching && e.position.y < 20.0f) {
-                for (const auto& w : entities) {
-                    if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(e.position, w.position) < w.stateValue) {
-                        if (!isPandoraOpen) {
-                            e.isGlitching = false;
-                            e.stateTimer = -999.0f; // Permanently ruined by water
+                    bool hasGlasses = false;
+                    for (const auto& other : entities) {
+                        if (other.attachedTo == (int)i && other.HasTag(TAG_EYEWEAR) && !other.HasTag(TAG_BROKEN)) {
+                            hasGlasses = true; break;
                         }
                     }
+                    if (e.HasTag(TAG_BROKEN) || hasGlasses) e.isGlitching = false;
+                    else e.isGlitching = true; 
+                }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+        }
+
+        // DYNAMIC EVALUATION: Aiolus Wind Bag
+        if (e.HasTag(TAG_WIND_BAG)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 2 && shiftTimer >= 90.0f) || (currentNight > 2);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen) {
+                    e.isGlitching = false;
+                } else {
+                    bool hasCork = false;
+                    bool hasTape = false;
+
+                    // Pass 1: Check if it's already fixed by something
+                    for (size_t j = 0; j < entities.size(); ++j) {
+                        auto& item = entities[j];
+                        if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) { 
+                            hasCork = true; 
+                        }
+                        if (item.HasTag(TAG_TAPE) && item.attachedTo == (int)i) {
+                            hasTape = true;
+                        }
+                    }
+
+                    // Pass 2: Check if player is pressing 'F' (isUsing) with the Duct Tape to fix it
+                    for (size_t j = 0; j < entities.size(); ++j) {
+                        auto& item = entities[j];
+                        if (item.HasTag(TAG_TAPE) && item.isUsing && Vector3Distance(e.position, item.position) < 150.0f) {
+                            // Enforce mutually exclusive fixes: Only attach if cork isn't already doing the job
+                            if (!hasCork && !hasTape) {
+                                item.attachedTo = i;      // Snap tape to the bag
+                                item.isUsing = false;     // Consume the use input
+                                hasTape = true;
+                            }
+                        }
+                    }
+
+                    if (e.HasTag(TAG_BROKEN) || hasCork || hasTape) e.isGlitching = false;
+                    else e.isGlitching = true; 
+                }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+            
+            // Push Force
+            if (e.isGlitching) { 
+                float dist = Vector3Distance(e.position, player.position);
+                if (dist < 600.0f && dist > 10.0f) {
+                    Vector3 pushDir = Vector3Normalize(Vector3Subtract(player.position, e.position));
+                    float force = 1200.0f; 
+                    player.velocity.x += pushDir.x * force * dt;
+                    player.velocity.z += pushDir.z * force * dt;
                 }
             }
         }
 
+        // DYNAMIC EVALUATION: Water Source
         if (e.HasTag(TAG_WATER_SOURCE)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 1 && shiftTimer >= 90.0f) || (currentNight > 1);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen || e.isStone) {
+                    e.isGlitching = false;
+                } else {
+                    bool hasCork = false;
+                    bool hasTape = false;
+
+                    // Pass 1: Check existing fixes
+                    for (size_t j = 0; j < entities.size(); ++j) {
+                        auto& item = entities[j];
+                        if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) { 
+                            hasCork = true; 
+                        }
+                        if (item.HasTag(TAG_TAPE) && item.attachedTo == (int)i) {
+                            hasTape = true;
+                        }
+                    }
+
+                    // Pass 2: Apply tape when pressing 'F'
+                    for (size_t j = 0; j < entities.size(); ++j) {
+                        auto& item = entities[j];
+                        if (item.HasTag(TAG_TAPE) && item.isUsing && Vector3Distance(e.position, item.position) < 150.0f) {
+                            // Enforce mutually exclusive fixes
+                            if (!hasCork && !hasTape) {
+                                item.attachedTo = i;       // Snap tape to the water source
+                                item.isUsing = false;      // Consume the use input
+                                hasTape = true;
+                            }
+                        }
+                    }
+
+                    if (hasCork || hasTape) e.isGlitching = false;
+                    else e.isGlitching = true;
+                }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+            
             if (e.isGlitching) {
                 float maxRadius = 9999.0f;
                 for (const auto& sp : entities) if (sp.HasTag(TAG_SPONGE) && !sp.isGrabbed && sp.position.y < 20.0f) { 
@@ -292,90 +352,122 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             if (grabbedEntityIndex != -1 && entities[grabbedEntityIndex].HasTag(TAG_MOP) && entities[grabbedEntityIndex].isUsing) {
                 if (Vector3Distance(player.position, e.position) < e.stateValue + 100.0f) { e.stateValue -= 400.0f * dt; if (e.stateValue < 0) e.stateValue = 0; }
             }
-            if (e.stateTimer > 0.0f) { e.stateTimer -= dt; if (e.stateTimer <= 0.0f) e.isGlitching = true; }
         }
 
-        if (e.HasTag(TAG_MEDUSA)) {
-            // Check if she currently has glasses on her face
-            bool hasGlasses = false;
-            for (const auto& other : entities) {
-                if (other.attachedTo == (int)i && other.HasTag(TAG_EYEWEAR) && !other.HasTag(TAG_BROKEN)) {
-                    hasGlasses = true; break;
+        // DYNAMIC EVALUATION: Sandals
+        if (e.HasTag(TAG_SANDALS)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 2 && shiftTimer >= 30.0f) || (currentNight > 2);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen || e.stateTimer == -999.0f) e.isGlitching = false;
+                else e.isGlitching = true;
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+
+            if (e.isGrabbed && e.isGlitching) {
+                e.stateTimer = 5.0f; 
+            } 
+            else if (e.isGlitching && !e.isStone) {
+                if (e.stateTimer > 0.0f) {
+                    e.stateTimer -= dt; 
+                } else {
+                    e.attachedTo = -1; 
+                    float timeSec = (float)GetTime();
+                    e.position.y = 70.0f + sinf(timeSec * 4.0f) * 15.0f; 
+                    e.velocity.x = cosf(timeSec * 0.5f) * 500.0f;
+                    e.velocity.z = sinf(timeSec * 0.35f) * 500.0f;
                 }
             }
             
-            // Dynamic State Restoration: If glasses are removed, and timeline dictates, turn back on!
-            if (e.HasTag(TAG_BROKEN) || hasGlasses) {
-                e.isGlitching = false;
-            } else if ((currentNight < 5 && shiftTimer >= 15.0f) || (currentNight >= 5 && shiftTimer >= 0.1f)) {
-                e.isGlitching = true;
-            }
-        }
-
-        if (e.HasTag(TAG_BOULDER) && e.isGlitching) {
-            // --- DIRECTION CONTROL ---
-            // 1.0f rolls right (+X), -1.0f rolls left (-X)
-            // Change this based on where your door actually is!
-            float rollDir = -1.0f; 
-            
-            e.velocity.x += 120.0f * rollDir * dt; 
-
-            // 1. SANDBAG STOPPING LOGIC
-            for (const auto& other : entities) {
-                if (other.HasTag(TAG_SANDBAG) && !other.isGrabbed && other.position.y < 20.0f) {
-                    if (CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
-                        // Check if the sandbag is in front of the boulder
-                        if ((rollDir > 0 && other.position.x > e.position.x) || 
-                            (rollDir < 0 && other.position.x < e.position.x)) {
-                            
-                            e.velocity.x = 0; // Stop the boulder
-                            
-                            // Prevent phasing by physically holding it against the sandbag
-                            if (rollDir > 0) e.position.x = other.position.x - 45.0f;
-                            else e.position.x = other.position.x + 45.0f;
+            if (e.isGlitching && e.position.y < 20.0f) {
+                for (const auto& w : entities) {
+                    if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(e.position, w.position) < w.stateValue) {
+                        if (!isPandoraOpen) {
+                            e.isGlitching = false;
+                            e.stateTimer = -999.0f; // Permanently ruined
                         }
                     }
                 }
             }
+        }
 
-            // 2. PLAYER PUSHING LOGIC
-            if (CheckCollisionLists(e.GetWorldBounds(), player.GetWorldBounds())) {
-                if (player.position.x > e.position.x) { 
-                    player.position.x = e.position.x + 80.0f; 
-                    if (player.velocity.x < -10.0f) e.velocity.x = -200.0f; 
-                    else e.velocity.x = player.velocity.x; // Inherit player speed
-                } else {
-                    player.position.x = e.position.x - 80.0f;
-                    if (player.velocity.x > 10.0f) e.velocity.x = 200.0f; 
-                    else e.velocity.x = player.velocity.x; // Inherit player speed
-                }
+        // DYNAMIC EVALUATION: Boulder
+        if (e.HasTag(TAG_BOULDER)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 2 && shiftTimer >= 0.1f) || (currentNight > 2);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen || e.HasTag(TAG_BROKEN)) e.isGlitching = false;
+                else e.isGlitching = true;
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
             }
 
-            // 3. BREAKING JARS (FRAGILE ITEMS)
-            for (auto& other : entities) {
-                if (&e != &other && (other.HasTag(TAG_FRAGILE) || other.HasTag(TAG_MEDUSA))) {
-                    if (CheckCollisionLists(e.GetWorldInteractBounds(), other.GetWorldInteractBounds()) && !other.HasTag(TAG_BROKEN)) {
-                        other.AddTag(TAG_BROKEN); 
-                        other.color = DARKGRAY; 
-                        if (!other.boundsList.empty()) other.boundsList[0].max.y = 5.0f; 
-                        
-                        if (!isPandoraOpen) other.isGlitching = false; 
-                        
-                        // KNOCK IT OFF THE PEDESTAL!
-                        other.attachedTo = -1; 
-                        other.velocity.x = 400.0f * rollDir; // Throw it forward
-                        other.velocity.y = 300.0f;           // Pop it into the air so it realistically crashes to the floor
+            if (e.isGlitching) {
+                float rollDir = -1.0f; 
+                e.velocity.x += 120.0f * rollDir * dt; 
+
+                for (const auto& other : entities) {
+                    if (other.HasTag(TAG_SANDBAG) && !other.isGrabbed && other.position.y < 20.0f) {
+                        if (CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
+                            if ((rollDir > 0 && other.position.x > e.position.x) || 
+                                (rollDir < 0 && other.position.x < e.position.x)) {
+                                e.velocity.x = 0; 
+                                if (rollDir > 0) e.position.x = other.position.x - 45.0f;
+                                else e.position.x = other.position.x + 45.0f;
+                            }
+                        }
+                    }
+                }
+
+                if (CheckCollisionLists(e.GetWorldBounds(), player.GetWorldBounds())) {
+                    if (player.position.x > e.position.x) { 
+                        player.position.x = e.position.x + 80.0f; 
+                        if (player.velocity.x < -10.0f) e.velocity.x = -200.0f; 
+                        else e.velocity.x = player.velocity.x; 
+                    } else {
+                        player.position.x = e.position.x - 80.0f;
+                        if (player.velocity.x > 10.0f) e.velocity.x = 200.0f; 
+                        else e.velocity.x = player.velocity.x; 
+                    }
+                }
+
+                for (auto& other : entities) {
+                    if (&e != &other && (other.HasTag(TAG_FRAGILE) || other.HasTag(TAG_MEDUSA))) {
+                        if (CheckCollisionLists(e.GetWorldInteractBounds(), other.GetWorldInteractBounds()) && !other.HasTag(TAG_BROKEN)) {
+                            other.AddTag(TAG_BROKEN); 
+                            other.color = DARKGRAY; 
+                            if (!other.boundsList.empty()) other.boundsList[0].max.y = 5.0f; 
+                            if (!isPandoraOpen) other.isGlitching = false; 
+                            other.attachedTo = -1; 
+                            other.velocity.x = 400.0f * rollDir; 
+                            other.velocity.y = 300.0f;           
+                        }
                     }
                 }
             }
         }
 
+        // DYNAMIC EVALUATION: Sun Disk
         if (e.HasTag(TAG_SUN_DISK)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 3 && shiftTimer >= 90.0f) || (currentNight > 3);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen || (e.color.r == BLACK.r && e.color.g == BLACK.g && e.color.b == BLACK.b)) {
+                    e.isGlitching = false;
+                } else {
+                    e.isGlitching = true;
+                }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+
             if (e.isGlitching) {
                 e.color = ORANGE; e.canGrab = false; 
                 for (auto& w : entities) {
                     if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(e.position, w.position) < w.stateValue) {
-                        if (!isPandoraOpen) e.isGlitching = false; break;
+                        if (!isPandoraOpen) {
+                            e.isGlitching = false; 
+                            e.color = BLACK; // Fixes it permanently
+                        }
+                        break;
                     }
                 }
                 for (auto& other : entities) {
@@ -386,28 +478,170 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             } else { e.color = BLACK; e.canGrab = true; }
         }
 
-        if (e.HasTag(TAG_MUMMY) && e.isGlitching && !e.HasTag(TAG_BROKEN) && !e.isStone && !e.isGrabbed) {
-            Entity* targetFusebox = nullptr;
-            float closestDist = 9999.0f;
-            for (auto& other : entities) {
-                if (other.HasTag(TAG_FUSEBOX) && other.stateValue > 0.5f) { 
-                    float d = Vector3Distance(e.position, other.position);
-                    if (d < closestDist) { closestDist = d; targetFusebox = &other; }
+        // DYNAMIC EVALUATION: Mummy
+        if (e.HasTag(TAG_MUMMY)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 3 && shiftTimer >= 0.1f) || (currentNight > 3);
+            if (activeTime && e.position.y > -50.0f) {
+                bool isTiedUp = (e.color.r == WHITE.r && e.color.g == WHITE.g && e.color.b == WHITE.b);
+                if (isPandoraOpen || e.HasTag(TAG_BROKEN) || e.isStone || isTiedUp) {
+                    e.isGlitching = false;
+                } else {
+                    e.isGlitching = true;
                 }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
             }
-            if (targetFusebox) {
-                Vector3 dir = Vector3Normalize(Vector3Subtract(targetFusebox->position, e.position));
-                e.velocity.x += dir.x * 250.0f * dt; e.velocity.z += dir.z * 250.0f * dt;
-                if (closestDist < 80.0f) targetFusebox->stateValue = 0.0f; 
-            } else {
-                if (GetRandomValue(0, 100) < 2) { 
-                    e.facingDir.x = (GetRandomValue(-100, 100) / 100.0f); e.facingDir.z = (GetRandomValue(-100, 100) / 100.0f);
-                    if (Vector3Length(e.facingDir) > 0.0f) e.facingDir = Vector3Normalize(e.facingDir);
+
+            if (e.isGlitching && !e.HasTag(TAG_BROKEN) && !e.isStone && !e.isGrabbed) {
+                Entity* targetFusebox = nullptr;
+                float closestDist = 9999.0f;
+                for (auto& other : entities) {
+                    if (other.HasTag(TAG_FUSEBOX) && other.stateValue > 0.5f) { 
+                        float d = Vector3Distance(e.position, other.position);
+                        if (d < closestDist) { closestDist = d; targetFusebox = &other; }
+                    }
                 }
-                e.velocity.x += e.facingDir.x * 120.0f * dt; e.velocity.z += e.facingDir.z * 120.0f * dt;
+                if (targetFusebox) {
+                    Vector3 dir = Vector3Normalize(Vector3Subtract(targetFusebox->position, e.position));
+                    e.velocity.x += dir.x * 250.0f * dt; e.velocity.z += dir.z * 250.0f * dt;
+                    if (closestDist < 80.0f) targetFusebox->stateValue = 0.0f; 
+                } else {
+                    if (GetRandomValue(0, 100) < 2) { 
+                        e.facingDir.x = (GetRandomValue(-100, 100) / 100.0f); e.facingDir.z = (GetRandomValue(-100, 100) / 100.0f);
+                        if (Vector3Length(e.facingDir) > 0.0f) e.facingDir = Vector3Normalize(e.facingDir);
+                    }
+                    e.velocity.x += e.facingDir.x * 120.0f * dt; e.velocity.z += e.facingDir.z * 120.0f * dt;
+                }
             }
         }
-        
+
+        // DYNAMIC EVALUATION: Zeus
+        if (e.HasTag(TAG_ZEUS)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 3 && shiftTimer >= 0.1f) || (currentNight > 3);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen) e.isGlitching = false;
+                else e.isGlitching = true;
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+        }
+
+        // DYNAMIC EVALUATION: Mjolnir
+        if (e.HasTag(TAG_MJOLNIR)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 4 && shiftTimer >= 0.1f) || (currentNight > 4);
+            if (activeTime && e.position.y > -50.0f) {
+                bool isOnStand = (e.attachedTo != -1 && entities[e.attachedTo].name.find("stand") != std::string::npos);
+                if (isPandoraOpen || isOnStand) {
+                    e.isGlitching = false;
+                } else {
+                    e.isGlitching = true; 
+                }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+
+            if (e.isGlitching && e.attachedTo == -1) {
+                if (!e.canGrab) {
+                    for (auto& other : entities) {
+                        if (other.HasTag(TAG_SANDALS) && CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
+                            e.canGrab = true; 
+                        }
+                    }
+                }
+                
+                if (!e.isGrabbed) {
+                    for (size_t j = 0; j < entities.size(); ++j) {
+                        auto& stand = entities[j];
+                        if (stand.name.find("stand") != std::string::npos && CheckCollisionLists(e.GetWorldBounds(), stand.GetWorldBounds())) {
+                            e.attachedTo = j;        
+                            e.isGlitching = false;   
+                            e.velocity = {0,0,0};    
+                            break;
+                        }
+                    }
+                }
+            } 
+            else if (!e.isGlitching && e.attachedTo == -1 && !e.isGrabbed) {
+                float timeSec = (float)GetTime();
+                e.position.y = 40.0f + sinf(timeSec * 3.0f + e.position.x) * 10.0f; 
+                e.velocity.y = 0.0f; 
+            }
+        }
+
+        // DYNAMIC EVALUATION: Gleipnir
+        if (e.HasTag(TAG_GLEIPNIR)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 4 && shiftTimer >= 90.0f) || (currentNight > 4);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen || e.isStone || e.attachedTo != -1) {
+                    e.isGlitching = false;
+                } else {
+                    e.isGlitching = true; 
+                }
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+
+            if (e.isGlitching && !e.isStone) {
+                e.position.y = 5.0f; 
+                Vector3 toPlayer = Vector3Subtract(player.position, e.position);
+                float dist = Vector3Length(toPlayer);
+                if (dist > 10.0f) { 
+                    Vector3 dir = { toPlayer.x / dist, 0.0f, toPlayer.z / dist }; 
+                    Vector3 perp = { -dir.z, 0.0f, dir.x }; 
+                    float timeSec = (float)GetTime();
+                    float wiggle = sinf(timeSec * 8.0f) * 350.0f; 
+                    e.velocity.x = dir.x * 250.0f + perp.x * wiggle; e.velocity.z = dir.z * 250.0f + perp.z * wiggle;
+                }
+                for (size_t j = 0; j < entities.size(); ++j) {
+                    auto& other = entities[j];
+                    if (&e != &other && !other.isGrabbed && e.attachedTo == -1 && CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
+                        if (other.HasTag(TAG_SANDBAG)) {
+                            e.attachedTo = j; if (!isPandoraOpen) e.isGlitching = false; e.position.y = other.position.y + 10.0f; break; 
+                        }
+                        if (other.HasTag(TAG_MUMMY) && other.isGlitching) {
+                            e.attachedTo = j; 
+                            if (!isPandoraOpen) { e.isGlitching = false; other.isGlitching = false; other.color = WHITE; } 
+                            e.position.y = other.position.y + 30.0f; break; 
+                        }
+                        if (other.name == "Player") player.isDead = true; 
+                    }
+                }
+            }
+        }
+
+        // DYNAMIC EVALUATION: Banshee Stone
+        if (e.HasTag(TAG_BANSHEE_STONE)) {
+            bool activeTime = (currentNight >= 5) || (currentNight == 4 && shiftTimer >= 0.1f) || (currentNight > 4);
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen) e.isGlitching = false;
+                else e.isGlitching = true;
+            } else if (e.position.y <= -50.0f) {
+                e.isGlitching = false;
+            }
+
+            if (e.isGlitching && !e.isStone) {
+                e.stateValue += ((currentNight == 4) ? 17.77f : 400.0f) * dt; 
+                if (e.stateValue > 800.0f) {
+                    if (currentNight == 4) {
+                        int effect = GetRandomValue(0, 2);
+                        if (effect == 0) {
+                            for(auto& t: entities) if(t.HasTag(TAG_SUN_DISK)) { t.color = ORANGE; t.canGrab = false; }
+                        } else if (effect == 1) {
+                            for(auto& t: entities) if(t.HasTag(TAG_MUMMY)) { t.RemoveTag(TAG_BROKEN); t.color = DARKGRAY; }
+                        } else {
+                            for(auto& t: entities) if(t.HasTag(TAG_SANDALS)) { t.stateTimer = 0.0f; }
+                        }
+                    } else {
+                        for (auto& target : entities) if (&target != &e && !target.isStatic && !target.isGrabbed && target.name != "Player" && target.position.y > -50.0f) {
+                            if (Vector3Distance(e.position, target.position) < 800.0f) target.isGlitching = true;
+                        }
+                    }
+                    e.stateValue = 0.0f; 
+                }
+            }
+        }
+
+        // Hole functionality (Black Hole)
         if (e.HasTag(TAG_HOLE)) {
             for (auto& target : entities) {
                 if (&target != &e && CheckCollisionLists(e.GetWorldBounds(), target.GetWorldBounds())) {
@@ -421,91 +655,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                         if (!isPandoraOpen) target.isGlitching = false; 
                         target.velocity = {0,0,0}; target.position = e.position; target.position.y = -30.0f; 
                     }
-                }
-            }
-        }
-
-        if (e.HasTag(TAG_MJOLNIR)) {
-            if (e.canGrab && !e.isGrabbed && e.attachedTo == -1) {
-                float timeSec = (float)GetTime();
-                e.position.y = 40.0f + sinf(timeSec * 3.0f + e.position.x) * 10.0f; e.velocity.y = 0.0f; 
-            }
-            if (!e.canGrab) {
-                for (const auto& w : entities) {
-                    if (w.HasTag(TAG_BUBBLE_WRAP) && w.isGrabbed && CheckCollisionLists(e.GetWorldBounds(), w.GetWorldInteractBounds())) {
-                        e.position.x = w.position.x; e.position.z = w.position.z;
-                    }
-                }
-            }
-        }
-
-        if (e.HasTag(TAG_GLEIPNIR) && e.isGlitching && !e.isStone) {
-            e.position.y = 5.0f; 
-            Vector3 toPlayer = Vector3Subtract(player.position, e.position);
-            float dist = Vector3Length(toPlayer);
-            if (dist > 10.0f) { 
-                Vector3 dir = { toPlayer.x / dist, 0.0f, toPlayer.z / dist }; 
-                Vector3 perp = { -dir.z, 0.0f, dir.x }; 
-                float timeSec = (float)GetTime();
-                float wiggle = sinf(timeSec * 8.0f) * 350.0f; 
-                e.velocity.x = dir.x * 250.0f + perp.x * wiggle; e.velocity.z = dir.z * 250.0f + perp.z * wiggle;
-            }
-            for (size_t j = 0; j < entities.size(); ++j) {
-                auto& other = entities[j];
-                if (&e != &other && !other.isGrabbed && e.attachedTo == -1 && CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
-                    if (other.HasTag(TAG_SANDBAG)) {
-                        e.attachedTo = j; if (!isPandoraOpen) e.isGlitching = false; e.position.y = other.position.y + 10.0f; break; 
-                    }
-                    if (other.HasTag(TAG_MUMMY) && other.isGlitching) {
-                        e.attachedTo = j; 
-                        if (!isPandoraOpen) { e.isGlitching = false; other.isGlitching = false; other.color = WHITE; }
-                        e.position.y = other.position.y + 30.0f; break; 
-                    }
-                    if (other.name == "Player") player.isDead = true; 
-                }
-            }
-        }
-
-        if (e.HasTag(TAG_BANSHEE_STONE) && e.isGlitching && !e.isStone) {
-            e.stateValue += ((currentNight == 4) ? 17.77f : 400.0f) * dt; 
-            if (e.stateValue > 800.0f) {
-                if (currentNight == 4) {
-                    int effect = GetRandomValue(0, 2);
-                    if (effect == 0) for(auto& t: entities) if(t.HasTag(TAG_SUN_DISK) && t.position.y > -50.0f) t.isGlitching = true;
-                    else if (effect == 1) for(auto& t: entities) if(t.HasTag(TAG_MUMMY) && t.position.y > -50.0f) { t.isGlitching = true; t.RemoveTag(TAG_BROKEN); t.color = WHITE; }
-                    else for(auto& t: entities) if(t.HasTag(TAG_SANDALS) && t.position.y > -50.0f) { t.isGlitching = true; t.stateTimer = 0.0f; }
-                } else {
-                    for (auto& target : entities) if (&target != &e && !target.isStatic && !target.isGrabbed && target.name != "Player" && target.position.y > -50.0f) {
-                        if (Vector3Distance(e.position, target.position) < 800.0f) target.isGlitching = true;
-                    }
-                }
-                e.stateValue = 0.0f; 
-            }
-        }
-
-        
-        if (e.HasTag(TAG_WIND_BAG) && e.isGlitching && !e.HasTag(TAG_BROKEN)) {
-            // 1. Check for the cork to plug it
-            for (auto& item : entities) {
-                if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) { 
-                    if (!isPandoraOpen) e.isGlitching = false; 
-                }
-            }
-            
-            // 2. Simple, standard horizontal push force
-            if (e.isGlitching) { 
-                float dist = Vector3Distance(e.position, player.position);
-                
-                // If player is within 600 units of the bag
-                if (dist < 600.0f && dist > 10.0f) {
-                    Vector3 pushDir = Vector3Normalize(Vector3Subtract(player.position, e.position));
-                    
-                    // A flat, standard push force (Adjust this number if you want it stronger/weaker)
-                    float force = 1200.0f; 
-                    
-                    // Push X and Z only. Zero gravity changes!
-                    player.velocity.x += pushDir.x * force * dt;
-                    player.velocity.z += pushDir.z * force * dt;
                 }
             }
         }
@@ -596,7 +745,7 @@ inline void SetupNightHazards(int currentNight, std::vector<Entity>& entities) {
         for (auto& e : entities) if (e.HasTag(TAG_MJOLNIR)) e.position.y = 0.0f; 
     }
 
-    // SNAPPING INITIALIZATION (Whitelist prevents floor tiles from snapping)
+    // SNAPPING INITIALIZATION
     for (size_t i = 0; i < entities.size(); ++i) {
         if (entities[i].name.find("stand") != std::string::npos) {
             bool occupied = false;
