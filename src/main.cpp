@@ -96,8 +96,8 @@ void ResetNight() {
     if (currentNight >= 1) doorsOpen[0] = true;
     if (currentNight >= 2) doorsOpen[1] = true;
     if (currentNight >= 3) doorsOpen[2] = true;
-    if (currentNight >= 4) doorsOpen[3] = true;
-    if (currentNight >= 5) doorsOpen[4] = true;
+    if (currentNight >= 4) doorsOpen[4] = true;
+    if (currentNight >= 5) doorsOpen[3] = true;
 
     if (currentNight > 1) LoadGame(currentNight, entities); 
     SetupNightHazards(currentNight, entities); 

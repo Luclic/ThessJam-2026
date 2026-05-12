@@ -42,3 +42,16 @@ fonts: courrier prime for employee handbook, Playfair Display for museum stuff, 
 
 
 mummy has limbs glitching on animation, need to fix on blender (something to do with max something per something limit is 4 on raylib.)
+
+
+BUGS
+No music on tutorial/ General fix for tutorial
+water needs fixing, fire extiniguisher sound, 
+pinakes, scale waterfall, aiolus bag, keraunos threeD model, mummy bed
+things fall through things
+
+{"Player", {
+            {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
+        }},
+
+{"Player", {100.0, {0.0, 0.0, 0.0}, 0.0}},
