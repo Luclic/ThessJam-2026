@@ -10,6 +10,10 @@ struct HazardVisuals {
     bool drawingExtinguisher = false;
     Vector3 extP1, extP2, extP3;
     bool pandoraWarning = false; 
+
+    bool drawingSunBeams = false;
+    Vector3 sunCenter;
+    float sunAngle = 0.0f;
 };
 
 // ====================================================================================
@@ -428,7 +432,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
         }
 
-        // DYNAMIC EVALUATION: Sun Disk
+       // DYNAMIC EVALUATION: Sun Disk
         if (e.HasTag(TAG_SUN_DISK)) {
             bool activeTime = (currentNight >= 5) || (currentNight == 3 && shiftTimer >= 90.0f) || (currentNight > 3);
             if (activeTime && e.position.y > -50.0f) {
@@ -443,56 +447,137 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
             if (e.isGlitching) {
                 e.color = ORANGE; e.canGrab = false; 
+                
+                // 1. ROTATION LOGIC
+                // e.stateValue holds the current angle in degrees. It spins 45 degrees per second!
+                e.stateValue += 45.0f * dt; 
+                if (e.stateValue >= 360.0f) e.stateValue -= 360.0f;
+
+                // 2. EXTINGUISHER SUPPRESSION
+                if (e.stateTimer > 0.0f) {
+                    e.stateTimer -= dt; // Counting down the 3 seconds of safety!
+                } else {
+                    // Turn on the visuals!
+                    visuals.drawingSunBeams = true;
+                    visuals.sunCenter = e.position;
+                    visuals.sunAngle = e.stateValue;
+
+                    // 3. DEADLY BEAM COLLISION
+                    Vector2 pPos = {player.position.x, player.position.z};
+                    Vector2 sPos = {e.position.x, e.position.z};
+                    
+                    // Check all 4 directions (0, 90, 180, 270 degrees from current rotation)
+                    for (int j = 0; j < 4; j++) {
+                        float angleRad = (e.stateValue + j * 90.0f) * DEG2RAD;
+                        Vector2 beamDir = {cos(angleRad), sin(angleRad)};
+                        
+                        // Check if player is in the beam (Length: 800 units, Width: 60 units)
+                        Vector2 toPlayer = {pPos.x - sPos.x, pPos.y - sPos.y};
+                        float projection = toPlayer.x * beamDir.x + toPlayer.y * beamDir.y; 
+                        
+                        if (projection > 0.0f && projection < 800.0f) { // If player is in front of this specific beam
+                            float perpDist = fabs(toPlayer.x * (-beamDir.y) + toPlayer.y * beamDir.x); // Distance from center line
+                            if (perpDist < 30.0f) { // If within the 60 unit width
+                                player.isDead = true; 
+                            }
+                        }
+                    }
+                }
+
+                // 4. THE PERMANENT FIX (Water)
                 for (auto& w : entities) {
                     if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(e.position, w.position) < w.stateValue) {
                         if (!isPandoraOpen) {
                             e.isGlitching = false; 
-                            e.color = BLACK; // Fixes it permanently
+                            e.color = BLACK;     // Fixes it permanently!
+                            e.stateTimer = 0.0f; // Reset suppression timer
                         }
                         break;
                     }
                 }
+                
+                // (Optional) Melts bubble wrap instantly
                 for (auto& other : entities) {
                     if (&e != &other && other.HasTag(TAG_BUBBLE_WRAP) && !other.isGrabbed && CheckCollisionLists(e.GetWorldBounds(), other.GetWorldBounds())) {
                         other.position = {-9999, -9999, -9999}; other.isSolid = false;
                     }
                 }
-            } else { e.color = BLACK; e.canGrab = true; }
+            } else { 
+                e.color = BLACK; e.canGrab = true; 
+            }
         }
 
+        
         // DYNAMIC EVALUATION: Mummy
         if (e.HasTag(TAG_MUMMY)) {
             bool activeTime = (currentNight >= 5) || (currentNight == 3 && shiftTimer >= 0.1f) || (currentNight > 3);
             if (activeTime && e.position.y > -50.0f) {
-                bool isTiedUp = (e.color.r == WHITE.r && e.color.g == WHITE.g && e.color.b == WHITE.b);
-                if (isPandoraOpen || e.HasTag(TAG_BROKEN) || e.isStone || isTiedUp) {
+                
+                // 1. Handle Tape Application (Press 'F' while holding Tape near the Mummy)
+                for (size_t j = 0; j < entities.size(); ++j) {
+                    auto& item = entities[j];
+                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                        if (!e.HasTag(TAG_BROKEN)) { 
+                            e.AddTag(TAG_BROKEN); 
+                            e.color = LIGHTGRAY;       // Turn it gray to show it's wrapped in tape
+                            e.velocity = {0, 0, 0};    // Stop it from running instantly
+                            item.stateValue -= 1.0f;   // Use up tape durability
+                            item.isUsing = false;      // Consume the input
+                        }
+                    }
+                }
+
+                // 2. Check all possible fixes
+                bool isTiedUpByGleipnir = (e.color.r == WHITE.r && e.color.g == WHITE.g && e.color.b == WHITE.b);
+                
+                if (isPandoraOpen || e.HasTag(TAG_BROKEN) || e.isStone || isTiedUpByGleipnir) {
                     e.isGlitching = false;
                 } else {
                     e.isGlitching = true;
                 }
             } else if (e.position.y <= -50.0f) {
-                e.isGlitching = false;
+                e.isGlitching = false; // It fell in the Black Hole!
             }
 
-            if (e.isGlitching && !e.HasTag(TAG_BROKEN) && !e.isStone && !e.isGrabbed) {
+            // 3. Mummy AI Behavior (Only runs if it's actively glitching!)
+            if (e.isGlitching && !e.isGrabbed) {
                 Entity* targetFusebox = nullptr;
                 float closestDist = 9999.0f;
+                
+                // Look for the closest active fusebox
                 for (auto& other : entities) {
                     if (other.HasTag(TAG_FUSEBOX) && other.stateValue > 0.5f) { 
                         float d = Vector3Distance(e.position, other.position);
                         if (d < closestDist) { closestDist = d; targetFusebox = &other; }
                     }
                 }
+                
                 if (targetFusebox) {
+                    // HUNT THE FUSEBOX!
                     Vector3 dir = Vector3Normalize(Vector3Subtract(targetFusebox->position, e.position));
-                    e.velocity.x += dir.x * 250.0f * dt; e.velocity.z += dir.z * 250.0f * dt;
-                    if (closestDist < 80.0f) targetFusebox->stateValue = 0.0f; 
-                } else {
-                    if (GetRandomValue(0, 100) < 2) { 
-                        e.facingDir.x = (GetRandomValue(-100, 100) / 100.0f); e.facingDir.z = (GetRandomValue(-100, 100) / 100.0f);
-                        if (Vector3Length(e.facingDir) > 0.0f) e.facingDir = Vector3Normalize(e.facingDir);
+                    
+                    // Rotate the mummy to face its target
+                    e.facingDir = dir;
+                    e.stateValue = atan2(e.facingDir.x, e.facingDir.z) * RAD2DEG; 
+                    
+                    e.velocity.x += dir.x * 250.0f * dt; 
+                    e.velocity.z += dir.z * 250.0f * dt;
+                    
+                    if (closestDist < 80.0f) {
+                        targetFusebox->stateValue = 0.0f; // Smash the fusebox, plunging the room into darkness!
                     }
-                    e.velocity.x += e.facingDir.x * 120.0f * dt; e.velocity.z += e.facingDir.z * 120.0f * dt;
+                } else {
+                    // WANDER AIMLESSLY (if all fuseboxes are broken)
+                    if (GetRandomValue(0, 100) < 2) { 
+                        e.facingDir.x = (GetRandomValue(-100, 100) / 100.0f); 
+                        e.facingDir.z = (GetRandomValue(-100, 100) / 100.0f);
+                        if (Vector3Length(e.facingDir) > 0.0f) {
+                            e.facingDir = Vector3Normalize(e.facingDir);
+                            e.stateValue = atan2(e.facingDir.x, e.facingDir.z) * RAD2DEG; // Rotate
+                        }
+                    }
+                    e.velocity.x += e.facingDir.x * 120.0f * dt; 
+                    e.velocity.z += e.facingDir.z * 120.0f * dt;
                 }
             }
         }
@@ -687,7 +772,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             for (auto& target : entities) {
                 if (&target != &player && CheckCollisionPointTriangle({target.position.x, target.position.z}, ep1, ep2, ep3)) {
                     if (target.HasTag(TAG_MJOLNIR)) { target.velocity.x += dir.x * 4000.0f * dt; target.velocity.z += dir.z * 4000.0f * dt; target.stateTimer = 1.5f; }
-                    if (target.HasTag(TAG_SUN_DISK) && target.isGlitching && !isPandoraOpen) { target.isGlitching = false; target.color = BLACK; target.canGrab = true; } 
+                    if (target.HasTag(TAG_SUN_DISK) && target.isGlitching && !isPandoraOpen) { target.stateTimer = 3.0f; } // Suppress the fire for 3 seconds!
                     if (target.HasTag(TAG_WATER_SOURCE) && target.stateValue > 0) { target.isStone = true; if (!isPandoraOpen) target.isGlitching = false; } 
                     if (target.canGrab && !target.HasTag(TAG_HEAVY)) { target.velocity.x += dir.x * 2500.0f * dt; target.velocity.z += dir.z * 2500.0f * dt; }
                     if (target.HasTag(TAG_PANDORA) && target.isGlitching) target.stateTimer = 15.0f;

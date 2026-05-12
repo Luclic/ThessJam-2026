@@ -224,6 +224,36 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
 
     if (hazVis.drawingBeam) { DrawTriangle3D(hazVis.beamP1, hazVis.beamP2, hazVis.beamP3, { 0, 255, 0, 80 }); DrawTriangle3D(hazVis.beamP1, hazVis.beamP3, hazVis.beamP2, { 0, 255, 0, 80 }); }
     if (hazVis.drawingExtinguisher) { DrawTriangle3D(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); DrawTriangle3D(hazVis.extP1, hazVis.extP3, hazVis.extP2, { 255, 255, 255, 150 }); }
+    
+    // --- NEW: DRAW THE SUN DISK BEAMS ---
+    if (hazVis.drawingSunBeams) {
+        for (int j = 0; j < 4; j++) {
+            float angleRad = (hazVis.sunAngle + j * 90.0f) * DEG2RAD;
+            Vector3 dir = {cos(angleRad), 0.0f, sin(angleRad)};
+            Vector3 perp = {-dir.z, 0.0f, dir.x}; // Perpendicular vector for thickness
+
+            Vector3 startCenter = hazVis.sunCenter;
+            startCenter.y += 10.0f; // Hover slightly off the floor
+
+            // Beam reaches out 800 units
+            Vector3 endCenter = {startCenter.x + dir.x * 800.0f, startCenter.y, startCenter.z + dir.z * 800.0f};
+
+            // Calculate the 4 corners of the thick rectangle (30 units each side = 60 total width)
+            Vector3 p1 = {startCenter.x + perp.x * 30.0f, startCenter.y, startCenter.z + perp.z * 30.0f};
+            Vector3 p2 = {startCenter.x - perp.x * 30.0f, startCenter.y, startCenter.z - perp.z * 30.0f};
+            Vector3 p3 = {endCenter.x + perp.x * 30.0f, endCenter.y, endCenter.z + perp.z * 30.0f};
+            Vector3 p4 = {endCenter.x - perp.x * 30.0f, endCenter.y, endCenter.z - perp.z * 30.0f};
+
+            // Draw the thick beam using two triangles
+            DrawTriangle3D(p1, p3, p2, { 255, 100, 0, 150 });
+            DrawTriangle3D(p2, p3, p4, { 255, 100, 0, 150 });
+            
+            // Draw backfaces so it renders from both sides
+            DrawTriangle3D(p1, p2, p3, { 255, 100, 0, 150 });
+            DrawTriangle3D(p2, p4, p3, { 255, 100, 0, 150 });
+        }
+    }
+    
     EndMode3D();
 
     for(const auto& ft : floatingTexts) {

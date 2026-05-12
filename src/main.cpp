@@ -615,13 +615,13 @@ int main(void) {
                 if (currentAnimState == 3) playbackSpeed = 90.0f; 
 
                 animTimer += dt * playbackSpeed; 
-                animTimer = fmod(animTimer, (float)anims[activeIdx].frameCount); 
+                animTimer = fmod(animTimer, (float)anims[activeIdx].keyframeCount); 
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 
             if (mummyAnims != nullptr && mummyAnimCount > 0) {
                 mummyAnimTimer += dt * 30.0f; 
-                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
+                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].keyframeCount);
                 UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
             }
 
