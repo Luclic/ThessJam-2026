@@ -41,7 +41,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
             e.name = "lightning"; 
             e.color.a = 255; // Force 100% opacity
         }        else if (e.name == "Display Vase") { e.AddTag(TAG_FRAGILE); e.canGrab = true; e.canThrow = true; e.name = "Tall Vase"; }
-        else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = true; e.canThrow = true; e.name = "Chalice"; } 
+        else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = false; e.canThrow = true; e.name = "Chalice"; } 
         else if (e.name == "Sisyphus Boulder") { e.AddTag(TAG_BOULDER); e.AddTag(TAG_HEAVY); e.name = "Rock"; }
         else if (e.name == "Aeolus Bag") { e.AddTag(TAG_WIND_BAG); e.canGrab = true; e.canThrow = true; e.name = "Coin Pouch"; }
 

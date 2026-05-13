@@ -13,6 +13,8 @@
 #include "Tutorial.h"  
 #include "Overlay.h"   
 #include "Credits.h"
+#include "Review.h"
+#include "News.h"
 #include <unordered_map>
 #include <string>
 #include <cstdio>
@@ -45,7 +47,7 @@ int grabbedEntityIndex = -1;
 int equippedEyewear = -1; 
 int equippedGloves = -1; 
 
-int currentNight = 5;
+int currentNight = 1;
 float shiftTimer = 0.0f;
 ShiftReport lastReport;
 
@@ -112,7 +114,8 @@ void ResetNight() {
     mainMusic.looping = false; 
     SetMusicVolume(mainMusic, mainMusicVolume);
 }
-
+bool triggerNextNight = false;
+bool triggerRetryNight = false;
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetTraceLogLevel(LOG_WARNING);
@@ -132,7 +135,7 @@ int main(void) {
     EndDrawing();
     // ----------------------------------------------
 
-    currentNight = 5; 
+    currentNight = 1; 
     std::ifstream saveFile("museum_save.dat", std::ios::binary);
     if (saveFile.is_open()) {
         saveFile.read((char*)&currentNight, sizeof(currentNight));
@@ -254,7 +257,7 @@ int main(void) {
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
     InitLevel(entities);
-    if (!LoadGame(currentNight, entities)) currentNight = 5; 
+    if (!LoadGame(currentNight, entities)) currentNight = 1; 
     camera.zoom = 1.0f;
 
     GoToMenu();
@@ -306,40 +309,98 @@ int main(void) {
         UpdateMusicStream(deathMusic);
         UpdateMusicStream(newsMusic);
         UpdateMusicStream(reviewsMusic);
-
+        
+        // --- NEW FIX: The Social Media Review Hook ---
         if (currentState == STATE_REVIEW) {
-            BeginDrawing(); ClearBackground(RAYWHITE);
-            DrawText("SHIFT COMPLETE - 8:00 AM", GetScreenWidth()/2 - 200, 100, 30, BLACK);
-            DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 160, 20, DARKBLUE);
-            int yOffset = 250;
-            for (const auto& rev : lastReport.reviews) { DrawText(TextFormat("- %s: %s", rev.artifactName.c_str(), rev.reviewText.c_str()), 100, yOffset, 20, DARKGRAY); yOffset += 40; }
-            DrawText("PRESS ENTER TO CONTINUE", GetScreenWidth()/2 - 150, GetScreenHeight() - 100, 20, GREEN);
-            if (IsKeyPressed(KEY_ENTER)) { SaveGame(currentNight, entities); ResetNight(); currentState = STATE_PLAYING; }
-            EndDrawing(); continue;
+            UpdateAndRenderReview((int&)currentState, lastReport, triggerNextNight, fontMuseum, fontEmployee);
+            
+            // If the user hit ENTER inside the review screen
+            if (triggerNextNight) {
+                SaveGame(currentNight, entities); 
+                ResetNight(); 
+                currentState = STATE_PLAYING; 
+                PlayMusicStream(mainMusic); 
+                triggerNextNight = false; // Reset the flag
+            }
+            continue; // Skip the rest of the 3D game loop
         }
 
+        // --- NEW FIX: The Newspaper Headline Hook ---
         if (currentState == STATE_GAMEOVER_FIRED) {
-            BeginDrawing(); ClearBackground(MAROON);
-            DrawText("YOU'RE FIRED.", GetScreenWidth()/2 - 150, 200, 50, WHITE);
-            DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
-            DrawText("PRESS ENTER TO RETRY THE NIGHT", GetScreenWidth()/2 - 200, GetScreenHeight() - 100, 20, YELLOW);
-            if (IsKeyPressed(KEY_ENTER)) { StopMusicStream(newsMusic); ResetNight(); currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
-            EndDrawing(); continue;
+            UpdateAndRenderNews((int&)currentState, lastReport, triggerRetryNight, fontMuseum, fontEmployee);
+            
+            // If the user hit ENTER inside the news screen
+            if (triggerRetryNight) {
+                StopMusicStream(newsMusic); 
+                ResetNight(); 
+                currentState = STATE_PLAYING; 
+                PlayMusicStream(mainMusic); 
+                triggerRetryNight = false; // Reset the flag
+            }
+            continue; // Skip the rest of the 3D game loop
         }
 
+        // --- NEW FIX: The Cinematic Death Screen ---
         if (currentState == STATE_GAMEOVER_DEATH) {
-            BeginDrawing(); ClearBackground(RED);
-            DrawText("YOU DIED.", GetScreenWidth()/2 - 120, 200, 50, BLACK);
-            DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
-            DrawText("PRESS ENTER TO RETRY THE NIGHT", GetScreenWidth()/2 - 200, GetScreenHeight() - 100, 20, YELLOW);
-            if (IsKeyPressed(KEY_ENTER)) { StopMusicStream(deathMusic); ResetNight(); currentState = STATE_PLAYING; PlayMusicStream(mainMusic); }
-            EndDrawing(); continue;
+            // A local static timer to handle the fade-in effect
+            static float deathFade = 0.0f;
+            deathFade += dt * 0.5f; // Takes 2 seconds to fully fade in
+            if (deathFade > 1.0f) deathFade = 1.0f;
+
+            BeginDrawing(); 
+            ClearBackground(BLACK); // Fade to pitch black
+            
+            float screenW = (float)GetScreenWidth();
+            float screenH = (float)GetScreenHeight();
+            float scale = std::min(screenW / 1280.0f, screenH / 960.0f);
+
+            // --- "YOU DIED" TEXT ---
+            const char* title = "YOU DIED";
+            float titleSize = 120.0f * scale;
+            Vector2 titleDims = MeasureTextEx(fontMuseum, title, titleSize, 2);
+            // Fade into a dark, blood red
+            DrawTextEx(fontMuseum, title, {screenW/2.0f - titleDims.x/2.0f, screenH * 0.25f}, titleSize, 2, Fade(MAROON, deathFade));
+
+            // --- FINAL VERDICT ---
+            float verdictSize = 30.0f * scale;
+            Vector2 verdictDims = MeasureTextEx(fontEmployee, lastReport.finalVerdict.c_str(), verdictSize, 1);
+            DrawTextEx(fontEmployee, lastReport.finalVerdict.c_str(), {screenW/2.0f - verdictDims.x/2.0f, screenH * 0.45f}, verdictSize, 1, Fade(GRAY, deathFade));
+
+            // --- AFTERLIFE MESSAGE (Cause of Death) ---
+            if (!lastReport.reviews.empty()) {
+                std::string afterlifeMsg = "\"" + lastReport.reviews[0].reviewText + "\" \n\n- " + lastReport.reviews[0].artifactName;
+                float msgSize = 25.0f * scale;
+                Vector2 msgDims = MeasureTextEx(fontEmployee, afterlifeMsg.c_str(), msgSize, 1);
+                DrawTextEx(fontEmployee, afterlifeMsg.c_str(), {screenW/2.0f - msgDims.x/2.0f, screenH * 0.55f}, msgSize, 1, Fade(LIGHTGRAY, deathFade));
+            }
+
+            // --- FOOTER PROMPT ---
+            const char* enterText = "PRESS ENTER TO ACCEPT YOUR FATE";
+            float enterSize = 25.0f * scale;
+            Vector2 enterDims = MeasureTextEx(fontEmployee, enterText, enterSize, 1);
+            
+            // Start blinking only after the fade is mostly complete
+            if (deathFade > 0.8f && (int)(GetTime() * 2) % 2 == 0) {
+                DrawTextEx(fontEmployee, enterText, {screenW / 2.0f - enterDims.x / 2.0f, screenH * 0.85f}, enterSize, 1, DARKGRAY);
+            }
+
+            if (IsKeyPressed(KEY_ENTER)) { 
+                StopMusicStream(deathMusic); 
+                ResetNight(); 
+                currentState = STATE_PLAYING; 
+                PlayMusicStream(mainMusic); 
+                deathFade = 0.0f; // Reset the fade for the next time you die!
+            }
+            
+            EndDrawing(); 
+            continue; // Skip the 3D drawing pipeline
         }
 
         Entity& player = entities[0];
         bool playerJumpedThisFrame = false; 
         bool triggerShiftStart = false;
         bool triggerNewGame = false;
+        bool triggerNextNight = false;
         HazardVisuals hazVis;
 
         if (!isOverlayActive) {
