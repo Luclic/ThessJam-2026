@@ -27,7 +27,7 @@ struct HazardVisuals {
 // ====================================================================================
 // --- MAIN PHYSICS & HAZARD LOOP ---
 // ====================================================================================
-inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, float dt, int grabbedEntityIndex, int equippedEyewear, int equippedGloves, int currentNight, float shiftTimer) {
+inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, float dt, int grabbedEntityIndex, int equippedEyewear, int equippedGloves, int currentNight, float shiftTimer, bool isPlaying) {
     Entity& player = entities[0];
     HazardVisuals visuals;
     visuals.pandoraWarning = false;
@@ -256,7 +256,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Medusa
         if (e.HasTag(TAG_MEDUSA)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 1 && shiftTimer >= 5.0f) || currentNight > 1);
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 1 && shiftTimer >= 5.0f) || currentNight > 1));
             if (activeTime && e.position.y > -50.0f) {
                 if (isPandoraOpen) {
                     e.isGlitching = false;
@@ -277,7 +277,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Aiolus Wind Bag
         if (e.HasTag(TAG_WIND_BAG)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 2 && shiftTimer >= 90.0f) || currentNight > 2);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 2 && shiftTimer >= 90.0f) || currentNight > 2));            
+            if (activeTime && e.position.y > -50.0f) {
                 if (isPandoraOpen) {
                     e.isGlitching = false;
                 } else {
@@ -287,7 +288,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     for (auto& item : entities) {
                         if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) hasCork = true;
                         if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
-                            if (!hasCork && !e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
+                            if (!hasCork && !e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateTimer -= 1.0f; item.isUsing = false; }
                         }
                     }
 
@@ -315,7 +316,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Water Source
         if (e.HasTag(TAG_WATER_SOURCE)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 1 && shiftTimer >= 90.0f) || currentNight > 1);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 1 && shiftTimer >= 90.0f) || currentNight > 1));            
+            if (activeTime && e.position.y > -50.0f) {
                 if (isPandoraOpen || e.isStone) {
                     e.isGlitching = false;
                 } else {
@@ -323,8 +325,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
                     for (auto& item : entities) {
                         if (item.HasTag(TAG_CORK) && !item.isGrabbed && Vector3Distance(e.position, item.position) < 60.0f) hasCork = true;
-                        if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
-                            if (!hasCork && !e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
+                        if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateTimer > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                            if (!hasCork && !e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateTimer -= 1.0f; item.isUsing = false; }
                         }
                     }
 
@@ -353,13 +355,14 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Sandals
         if (e.HasTag(TAG_SANDALS)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 2 && shiftTimer >= 30.0f) || currentNight > 2);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 2 && shiftTimer >= 30.0f) || currentNight > 2));            
+            if (activeTime && e.position.y > -50.0f) {
 
                 // Handle Tape Application
                 for (size_t j = 0; j < entities.size(); ++j) {
                     auto& item = entities[j];
-                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
-                        if (!e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
+                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateTimer > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                        if (!e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateTimer -= 1.0f; item.isUsing = false; }
                     }
                 }
 
@@ -383,7 +386,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 } else {
                     e.attachedTo = -1; 
                     float timeSec = (float)GetTime();
-                    e.position.y = 70.0f + sinf(timeSec * 4.0f) * 15.0f; 
+                    e.position.y = 70.0f + sinf(timeSec * 4.0f) * 15.0f;
                     e.velocity.x = cosf(timeSec * 0.5f) * 500.0f;
                     e.velocity.z = sinf(timeSec * 0.35f) * 500.0f;
                 }
@@ -405,7 +408,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Boulder (PROXIMITY FIX - No more physics jitter!)
         if (e.HasTag(TAG_BOULDER)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 2 && shiftTimer >= 0.1f) || currentNight > 2);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 2 && shiftTimer >= 0.1f) || currentNight > 2));            if (activeTime && e.position.y > -50.0f) {
                 bool isBlocked = false;
                 float rollDir = -1.0f; 
                 
@@ -430,7 +433,6 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
 
             if (e.isGlitching) {
-                if (!IsSoundPlaying(sounds["sisphus-rolling"])) PlaySound(sounds["sisphus-rolling"]);
                 float rollDir = -1.0f; 
                 e.velocity.x += 120.0f * rollDir * dt; 
 
@@ -460,14 +462,12 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                         }
                     }
                 }
-            } else {
-                if (IsSoundPlaying(sounds["sisphus-rolling"])) StopSound(sounds["sisphus-rolling"]);
-            }
+            } 
         }
 
        // DYNAMIC EVALUATION: Sun Disk
         if (e.HasTag(TAG_SUN_DISK)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 3 && shiftTimer >= 90.0f) || currentNight > 3);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 90.0f) || currentNight > 3));            if (activeTime && e.position.y > -50.0f) {
                 if (isPandoraOpen || (e.color.r == BLACK.r && e.color.g == BLACK.g && e.color.b == BLACK.b)) {
                     e.isGlitching = false;
                 } else {
@@ -542,15 +542,15 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         
         // DYNAMIC EVALUATION: Mummy
         if (e.HasTag(TAG_MUMMY)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 3 && shiftTimer >= 0.1f) || currentNight > 3);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 0.1f) || currentNight > 3));            if (activeTime && e.position.y > -50.0f) {
                 for (size_t j = 0; j < entities.size(); ++j) {
                     auto& item = entities[j];
-                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateTimer > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
                         if (!e.HasTag(TAG_BROKEN)) { 
                             e.AddTag(TAG_BROKEN); 
                             e.color = LIGHTGRAY;       
                             e.velocity = {0, 0, 0};    
-                            item.stateValue -= 1.0f;   
+                            item.stateTimer -= 1.0f;   
                             item.isUsing = false;      
                         }
                     }
@@ -648,7 +648,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Zeus
         if (e.HasTag(TAG_ZEUS)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 3 && shiftTimer >= 0.1f) || currentNight > 3);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 0.1f) || currentNight > 3));            if (activeTime && e.position.y > -50.0f) {
                 if (isPandoraOpen) e.isGlitching = false;
                 else e.isGlitching = true;
             } else if (e.position.y <= -50.0f) {
@@ -658,7 +658,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Mjolnir
         if (e.HasTag(TAG_MJOLNIR)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 4 && shiftTimer >= 0.1f) || currentNight > 4);            
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 4 && shiftTimer >= 0.1f) || currentNight > 4));            
             // --- NEW FIX: Check if Hermes Sandals are attached to the hammer! ---
             bool hasSandals = false;
             for (const auto& item : entities) {
@@ -671,6 +671,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 // If it's active time, Mjolnir gets heavy and breaks the pedestal!
                 if (e.attachedTo != -1 && entities[e.attachedTo].name.find("stand") != std::string::npos) {
                     e.attachedTo = -1; // Crash to the floor!
+                    
                 }
                 
                 if (isPandoraOpen || hasSandals) {
@@ -700,7 +701,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         
         // DYNAMIC EVALUATION: Banshee Stone
         if (e.HasTag(TAG_BANSHEE_STONE)) {
-            bool activeTime = (currentNight < 5) && ((currentNight == 4 && shiftTimer >= 0.1f) || currentNight > 4);            if (activeTime && e.position.y > -50.0f) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 4 && shiftTimer >= 0.1f) || currentNight > 4));            if (activeTime && e.position.y > -50.0f) {
                 if (isPandoraOpen) e.isGlitching = false;
                 else e.isGlitching = true;
             } else if (e.position.y <= -50.0f) {
@@ -744,7 +745,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
         // DYNAMIC EVALUATION: Gleipnir's Ribbon
         if (e.HasTag(TAG_GLEIPNIR)) {
             // 1. TIMELINE ACTIVATION (Night 4 @ 90s, or Night 5)
-            bool activeTime = (currentNight < 5) && ((currentNight == 4 && shiftTimer >= 90.0f) || currentNight > 4);            
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 4 && shiftTimer >= 90.0f) || currentNight > 4));            
             if (activeTime && e.position.y > -50.0f) {
                 // Stay dormant if Pandora is open, if you've beaten it 3 times, or if it's petrified
                 if (isPandoraOpen || gleipnirDefeats >= 3 || e.isStone) {

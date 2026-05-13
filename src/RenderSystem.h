@@ -358,7 +358,7 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
 
     for (const auto& ent : entities) {
         if (ent.isGrabbed && (ent.HasTag(TAG_TAPE) || ent.HasTag(TAG_BUBBLE_WRAP))) {
-            DrawText(TextFormat("%s USES LEFT: %d", ent.name.c_str(), (int)ent.stateValue), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (ent.stateValue > 0) ? GREEN : RED);
+            DrawText(TextFormat("%s USES LEFT: %d", ent.name.c_str(), (int)ent.stateTimer), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (ent.stateTimer > 0) ? GREEN : RED);
         }
     }
 

@@ -59,7 +59,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Sunglasses"; }
         else if (e.name == "Pixel Sunglasses") { e.AddTag(TAG_EYEWEAR); e.canGrab = true; e.name = "Pixel Sunglasses"; }
         else if (e.name == "Glove") { e.AddTag(TAG_GLOVES); e.canGrab = true; e.name = "Glove"; }
-        else if (e.name == "Painters Tape"||e.name == "Time Hotel 5.25 Painters Tape") { e.AddTag(TAG_TAPE); e.stateValue = 10.0f; e.canGrab = true; e.name = "Time Hotel 5.25 Painters Tape"; }
+        else if (e.name == "Painters Tape"||e.name == "Time Hotel 5.25 Painters Tape") { e.AddTag(TAG_TAPE); e.stateTimer = 3.0f; e.canGrab = true; e.name = "Painters Tape"; }
         else if (e.name == "Sponge") { e.AddTag(TAG_SPONGE); e.canGrab = true; e.name = "Sponge"; }
         else if (e.name == "Bag") { e.AddTag(TAG_SANDBAG); e.AddTag(TAG_HEAVY); e.canGrab = true; e.name = "Bag"; }
         else if (e.name == "Broom" || e.name == "Mop") { 
@@ -72,7 +72,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
                 e.interactBoundsList[0].max.y += 50.0f; 
             }
         }
-        else if (e.name == "Saw") { e.AddTag(TAG_HOLE_SAW); e.canGrab = true; e.name = "Saw"; }
+        else if (e.name == "Saw") { e.AddTag(TAG_HOLE_SAW); e.stateValue = 3.0f; e.canGrab = true; e.name = "Saw"; }
         else if (e.name == "Cardboard Boxes") { e.AddTag(TAG_BUBBLE_WRAP); e.stateValue = 3.0f; e.canGrab = true; e.name = "Cardboard Boxes"; }
         else if (e.name == "Giant Cork") { e.AddTag(TAG_CORK); e.canGrab = true; e.name = "Cork"; }
 
@@ -128,10 +128,10 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Pedestal 2") { e.name = "stand2"; e.isStatic = true; }
         else if (e.name == "Pedestal 3") { e.name = "stand3"; e.isStatic = true; }
         else if (e.name == "Pedestal 4") { e.name = "stand4"; e.isStatic = true; }
-        else if (e.name == "Bench 1") e.name = "bench1";
-        else if (e.name == "Bench 2") e.name = "bench2";
-        else if (e.name == "Bench 3" || e.name == "bench3") e.name = "bench3";
-        else if (e.name == "Desk") e.name = "desk";
+        else if (e.name == "Bench 1") { e.name = "bench1"; e.isStatic = true;}
+        else if (e.name == "Bench 2") { e.name = "bench2"; e.isStatic = true;}
+        else if (e.name == "Bench 3" || e.name == "bench3") { e.name = "bench3"; e.isStatic = true;}
+        else if (e.name == "Desk") {e.name = "desk"; e.isSolid = true;}
         else if (e.name == "Glass Case") e.name = "glasscase";
         else if (e.name == "Pillar 1") e.name = "pillar1";
         else if (e.name == "Pillar 2" || e.name == "pillar2") e.name = "pillar2";
@@ -144,7 +144,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Painting 2" || e.name == "painting2") e.name = "painting2";
         else if (e.name == "Painting Light") e.name = "paintinglight";
         else if (e.name == "Time Hotel Sign") e.name = "Time Hotel 7.07";
-        else if (e.name == "Ticket Stand") e.name = "ticketstand";
+        else if (e.name == "Ticket Stand") { e.name = "ticketstand"; e.isStatic = true;}
         else if (e.name == "Ticket Seat") e.name = "ticketstandseat";
         else if (e.name == "Modern Art Sticker") e.name = "Sticker";
         else if (e.name == "Info Button") { e.isSolid = true; e.name = "Info Button"; }
@@ -225,11 +225,11 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
     
     // Duct tape fixing fragile props
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_BROKEN)) {
-        tool.stateValue -= 1.0f;
+        tool.stateTimer -= 1.0f;
         target.RemoveTag(TAG_BROKEN);
         if (target.HasTag(TAG_FRAGILE)) { target.color = ORANGE; if (!target.boundsList.empty()) target.boundsList[0].max.y = 30.0f; }
         if (target.HasTag(TAG_MEDUSA)) { target.color = GREEN; if (!target.boundsList.empty()) target.boundsList[0].max.y = 30.0f; }
-        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        if (tool.stateTimer <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
         return CHEM_USED_BUT_KEPT;
     }
     

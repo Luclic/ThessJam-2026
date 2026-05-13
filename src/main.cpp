@@ -591,10 +591,10 @@ int main(void) {
                         Entity mat = MakeProp("Bubble Mat", player.position, matBox, SKYBLUE, {TAG_MAT});
                         mat.isSolid = false; mat.canGrab = false; entities.push_back(mat);
                     }
-                    if (held.HasTag(TAG_TAPE) && held.stateValue > 0) {
+                    if (held.HasTag(TAG_TAPE) && held.stateTimer > 0) {
                         for (auto& target : entities) {
-                            if (target.HasTag(TAG_WIND_BAG) && Vector3Distance(player.position, target.position) < 80.0f) { PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; held.stateValue -= 1.0f; }
-                            if (target.HasTag(TAG_MUMMY) && target.isGlitching && Vector3Distance(player.position, target.position) < 80.0f) { PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; target.velocity = {0, 0, 0}; target.color = LIGHTGRAY; held.stateValue -= 1.0f; }
+                            if (target.HasTag(TAG_WIND_BAG) && Vector3Distance(player.position, target.position) < 80.0f) { PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; held.stateTimer -= 1.0f; }
+                            if (target.HasTag(TAG_MUMMY) && target.isGlitching && Vector3Distance(player.position, target.position) < 80.0f) { PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; target.velocity = {0, 0, 0}; target.color = LIGHTGRAY; held.stateTimer -= 1.0f; }
                         }
                     }
                 }
@@ -663,7 +663,7 @@ int main(void) {
                             if (item.HasTag(TAG_SANDALS)) item.stateTimer = 4.0f;
                             if (item.name.find("sign") != std::string::npos) PlaySound(sounds["plastictap-wetfloors"]);
                             if (item.HasTag(TAG_SANDBAG)) PlaySound(sounds["sandbags-put-on-floor"]);
-                            item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1;
+                            item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1; item.isSolid = true;
                         } else if (interactTargets.size() == 1) { executeAction = true; actionTargetIdx = interactTargets[0]; isDropMenu = true; } 
                         else { showInteractMenu = true; isDropMenu = true; interactSelectedIndex = 0; }
                     } else {
@@ -688,6 +688,7 @@ int main(void) {
                     held.velocity = Vector3Scale(player.facingDir, throwStrength); held.velocity.y = upwardArc; 
                     if (held.HasTag(TAG_SANDALS)) held.isGlitching = true;
                     grabbedEntityIndex = -1;
+                    
                 }
             }
 
@@ -732,8 +733,9 @@ int main(void) {
                 mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
                 UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
             }
-
-            hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves, currentNight, shiftTimer);
+            
+            bool isPlaying = (currentState == STATE_PLAYING);
+            hazVis = UpdatePhysicsAndHazards(entities, dt, grabbedEntityIndex, equippedEyewear, equippedGloves, currentNight, shiftTimer, isPlaying);
             
             if (currentState == STATE_PLAYING || currentState == STATE_TUTORIAL) {
                 if (player.isStone || player.isDead) {
@@ -836,6 +838,7 @@ int main(void) {
                 // We now pass both the name AND the stateValue (which holds the ID)
                 UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep, entities[grabbedEntityIndex].name, entities[grabbedEntityIndex].stateTimer);        }
             }
+        
         EndDrawing();
 
         if (triggerNewGame) {
