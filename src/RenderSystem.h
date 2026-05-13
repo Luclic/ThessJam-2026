@@ -218,6 +218,23 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
                 DrawCylinderWires(tornadoPos, topRadius + 5.0f, bottomRadius + 5.0f, height, 6, {200, 230, 255, (unsigned char)(30 * fade)});
             }
         }
+
+
+        // --- NEW FIX: SUN DISK GLOWING CORE ---
+        if (e->HasTag(TAG_SUN_DISK)) {
+            if (e->isGlitching) {
+                float timeSec = (float)GetTime();
+                float pulse = (sinf(timeSec * 5.0f) + 1.0f) * 0.5f; // 0 to 1 pulsating
+                
+                // Draw a fiery floating core above the disk to show it is ACTIVE
+                Vector3 corePos = {e->position.x, e->position.y + 25.0f, e->position.z};
+                DrawSphereWires(corePos, 12.0f + (3.0f * pulse), 8, 8, ORANGE);
+                DrawSphere(corePos, 8.0f + (2.0f * pulse), {255, 100, 0, 200});
+            } else if (!e->canGrab) { // Using canGrab as our "Extinguished" flag
+                // Draw a dead, smoldering black coal to show it is permanently defeated!
+                DrawSphere({e->position.x, e->position.y + 25.0f, e->position.z}, 8.0f, {30, 30, 30, 255});
+            }
+        }
         // --------------------------------------------------------------
         if (e->HasTag(TAG_BANSHEE_STONE) && e->stateValue > 0.0f) DrawCylinderWires({e->position.x, e->position.y, e->position.z}, e->stateValue, e->stateValue, 1.0f, 16, {200, 100, 255, (unsigned char)(std::max(0.0f, 255.0f - (e->stateValue / 800.0f) * 255.0f))});
         
@@ -239,31 +256,24 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
     if (hazVis.drawingExtinguisher) { DrawTriangle3D(hazVis.extP1, hazVis.extP2, hazVis.extP3, { 255, 255, 255, 150 }); DrawTriangle3D(hazVis.extP1, hazVis.extP3, hazVis.extP2, { 255, 255, 255, 150 }); }
     
     // --- NEW: DRAW THE SUN DISK BEAMS ---
+    // --- NEW FIX: 3D CYLINDER SUN BEAMS ---
     if (hazVis.drawingSunBeams) {
+        float timeSec = (float)GetTime();
+        float beamPulse = (sinf(timeSec * 20.0f) + 1.0f) * 0.5f; // Rapid flickering pulse
+
         for (int j = 0; j < 4; j++) {
             float angleRad = (hazVis.sunAngle + j * 90.0f) * DEG2RAD;
             Vector3 dir = {cos(angleRad), 0.0f, sin(angleRad)};
-            Vector3 perp = {-dir.z, 0.0f, dir.x}; // Perpendicular vector for thickness
-
-            Vector3 startCenter = hazVis.sunCenter;
-            startCenter.y += 10.0f; // Hover slightly off the floor
-
-            // Beam reaches out 800 units
-            Vector3 endCenter = {startCenter.x + dir.x * 800.0f, startCenter.y, startCenter.z + dir.z * 800.0f};
-
-            // Calculate the 4 corners of the thick rectangle (30 units each side = 60 total width)
-            Vector3 p1 = {startCenter.x + perp.x * 30.0f, startCenter.y, startCenter.z + perp.z * 30.0f};
-            Vector3 p2 = {startCenter.x - perp.x * 30.0f, startCenter.y, startCenter.z - perp.z * 30.0f};
-            Vector3 p3 = {endCenter.x + perp.x * 30.0f, endCenter.y, endCenter.z + perp.z * 30.0f};
-            Vector3 p4 = {endCenter.x - perp.x * 30.0f, endCenter.y, endCenter.z - perp.z * 30.0f};
-
-            // Draw the thick beam using two triangles
-            DrawTriangle3D(p1, p3, p2, { 255, 100, 0, 150 });
-            DrawTriangle3D(p2, p3, p4, { 255, 100, 0, 150 });
             
-            // Draw backfaces so it renders from both sides
-            DrawTriangle3D(p1, p2, p3, { 255, 100, 0, 150 });
-            DrawTriangle3D(p2, p4, p3, { 255, 100, 0, 150 });
+            // Elevate the beams 25 units so they don't clip into the floor!
+            Vector3 startPos = {hazVis.sunCenter.x, hazVis.sunCenter.y + 25.0f, hazVis.sunCenter.z};
+            Vector3 endPos = {startPos.x + dir.x * 800.0f, startPos.y, startPos.z + dir.z * 800.0f};
+
+            // Outer glow (Translucent Orange)
+            DrawCylinderEx(startPos, endPos, 15.0f, 15.0f, 8, { 255, 100, 0, (unsigned char)(100 + 50 * beamPulse) });
+            
+            // Inner core (Bright Hot Yellow)
+            DrawCylinderEx(startPos, endPos, 6.0f + (2.0f * beamPulse), 6.0f + (2.0f * beamPulse), 6, { 255, 200, 50, 200 });
         }
     }
     

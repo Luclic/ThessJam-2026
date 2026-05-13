@@ -472,8 +472,11 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
        // DYNAMIC EVALUATION: Sun Disk
         if (e.HasTag(TAG_SUN_DISK)) {
-            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 90.0f) || currentNight > 3));            if (activeTime && e.position.y > -50.0f) {
-                if (isPandoraOpen || (e.color.r == BLACK.r && e.color.g == BLACK.g && e.color.b == BLACK.b)) {
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 90.0f) || currentNight > 3));            
+            
+            // If it is NOT canGrab, it means we permanently extinguished it!
+            if (activeTime && e.position.y > -50.0f) {
+                if (isPandoraOpen || !e.canGrab) {
                     e.isGlitching = false;
                 } else {
                     e.isGlitching = true;
@@ -483,14 +486,10 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             }
 
             if (e.isGlitching) {
-                e.color = ORANGE; e.canGrab = false; 
-                
                 // 1. ROTATION LOGIC
-                // e.stateValue holds the current angle in degrees. It spins 45 degrees per second!
                 e.stateValue += 45.0f * dt; 
                 if (e.stateValue >= 360.0f) e.stateValue -= 360.0f;
 
-                // --- NEW FIX: Beams instantly activate without the 3-second timer! ---
                 visuals.drawingSunBeams = true;
                 visuals.sunCenter = e.position;
                 visuals.sunAngle = e.stateValue;
@@ -499,18 +498,16 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 Vector2 pPos = {player.position.x, player.position.z};
                 Vector2 sPos = {e.position.x, e.position.z};
                 
-                // Check all 4 directions (0, 90, 180, 270 degrees from current rotation)
                 for (int j = 0; j < 4; j++) {
                     float angleRad = (e.stateValue + j * 90.0f) * DEG2RAD;
                     Vector2 beamDir = {cos(angleRad), sin(angleRad)};
                     
-                    // Check if player is in the beam (Length: 800 units, Width: 60 units)
                     Vector2 toPlayer = {pPos.x - sPos.x, pPos.y - sPos.y};
                     float projection = toPlayer.x * beamDir.x + toPlayer.y * beamDir.y; 
                     
-                    if (projection > 0.0f && projection < 800.0f) { // If player is in front of this specific beam
-                        float perpDist = fabs(toPlayer.x * (-beamDir.y) + toPlayer.y * beamDir.x); // Distance from center line
-                        if (perpDist < 30.0f) { // If within the 60 unit width
+                    if (projection > 0.0f && projection < 800.0f) { 
+                        float perpDist = fabs(toPlayer.x * (-beamDir.y) + toPlayer.y * beamDir.x); 
+                        if (perpDist < 35.0f) { // Increased hit radius to 35 to ensure the player burns!
                             player.isDead = true; 
                         }
                     }
@@ -521,7 +518,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(e.position, w.position) < w.stateValue) {
                         if (!isPandoraOpen) {
                             e.isGlitching = false; 
-                            e.color = BLACK;     // Fixes it permanently!
+                            e.canGrab = false;   // Flags it as permanently defeated!
+                            e.stateTimer = 0.0f; 
                         }
                         break;
                     }
@@ -534,7 +532,9 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     }
                 }
             } else { 
-                e.color = BLACK; e.canGrab = true; 
+                // Only allow grabbing if it is in its original dormant state (Night 1/2) 
+                // or if it was permanently extinguished by water/foam!
+                //e.color = BLACK; e.canGrab = true; 
             }
         }
 
@@ -647,9 +647,26 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
 
         // DYNAMIC EVALUATION: Zeus
         if (e.HasTag(TAG_ZEUS)) {
-            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 0.1f) || currentNight > 3));            if (activeTime && e.position.y > -50.0f) {
-                if (isPandoraOpen) e.isGlitching = false;
-                else e.isGlitching = true;
+            bool activeTime = isPlaying && ((currentNight < 5) && ((currentNight == 3 && shiftTimer >= 0.1f) || currentNight > 3));            
+            if (activeTime && e.position.y > -50.0f) {
+                
+                // --- NEW FIX: Scan the whole museum for the Petrified Bolt! ---
+                bool boltIsPetrified = false;
+                for (const auto& item : entities) {
+                    // Check if the item is the Lightning Bolt AND if it is petrified.
+                    // We removed the 'attachedTo' check so it doesn't have to be in his hands!
+                    if (item.HasTag(TAG_LIGHTNING) && item.isStone) {
+                        boltIsPetrified = true;
+                        break;
+                    }
+                }
+
+                // If the bolt has been turned to stone anywhere on the map!
+                if (boltIsPetrified) {
+                    e.isGlitching = false;
+                } else {
+                    e.isGlitching = true; // Still dangerous!
+                }
             } else if (e.position.y <= -50.0f) {
                 e.isGlitching = false;
             }
@@ -945,7 +962,7 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                     // --- NEW FIX: Permanently extinguish the Sun Disk! ---
                     if (target.HasTag(TAG_SUN_DISK) && target.isGlitching && !isPandoraOpen) { 
                         target.isGlitching = false; 
-                        target.color = BLACK; 
+                        target.canGrab = false;
                         target.stateTimer = 0.0f; 
                     }                    if (target.HasTag(TAG_WATER_SOURCE) && target.stateValue > 0) { target.isStone = true; if (!isPandoraOpen) target.isGlitching = false; } 
                     if (target.canGrab && !target.HasTag(TAG_HEAVY)) { target.velocity.x += dir.x * 2500.0f * dt; target.velocity.z += dir.z * 2500.0f * dt; }

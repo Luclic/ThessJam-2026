@@ -66,9 +66,9 @@ inline void UpdateAndRenderTutorial(int& currentState, const std::vector<Entity>
     switch(tutorialStep) {
         case 0: inst = "Use WASD to move around the museum. Press SPACE to jump."; break;
         case 1: inst = "Good. Now approach the table and press 'E' to grab the Employee Handbook."; break;
-        case 2: inst = "Press 'F' to read it. (Time freezes while reading. Your shift is 3 mins: 12 AM to 8 AM)"; break;
+        case 2: inst = "Press 'F' to read it. (Time freezes while reading. Find more magazines about the museum around)"; break;
         case 3: inst = "Excellent. Now grab the Sunglasses and press 'F' to wear them."; break;
-        case 4: inst = "You are equipped and ready. Press ENTER to start your first night shift!"; break;
+        case 4: inst = "You are now ready. Press ENTER to start your first night shift! Your shift is 3 mins: 12 AM to 8 AM"; break;
     }
     
     Vector2 instVec = MeasureTextEx(fontEmployee, inst, instSize, 1);

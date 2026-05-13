@@ -1388,12 +1388,6 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "Gleipnir Ribbon", {2260.0, 20.0, 2090.0}, {0,0,0}, {0,0,1}, {}, {}, {230,41,55,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 179.5, {} });
     e.back().boundsList = globalHitboxes["Snake"];
     e.back().interactBoundsList = globalHitboxes["Snake"];
-    e.push_back({ "Sphinx", {1790.0, 0.0, -1010.0}, {0,0,0}, {0,0,1}, {}, {}, {255,203,0,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
-    e.back().boundsList = globalHitboxes["Sphinx"];
-    e.back().interactBoundsList = globalHitboxes["Sphinx"];
-    e.push_back({ "Sphinx Nose", {1860.0, 0.0, -930.0}, {0,0,0}, {0,0,1}, {}, {}, {255,203,0,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
-    e.back().boundsList = globalHitboxes["Sphinx Nose"];
-    e.back().interactBoundsList = globalHitboxes["Sphinx Nose"];
     e.push_back({ "Pandora's Box", {4010.0, 44.0, 570.0}, {0,0,0}, {0,0,1}, {}, {}, {112,31,126,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 180.0, {} });
     e.back().boundsList = globalHitboxes["pandora"];
     e.back().interactBoundsList = globalHitboxes["pandora"];
