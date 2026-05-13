@@ -295,18 +295,23 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
 inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float secondsPerHour, int currentNight, const Entity& player, bool showInteractMenu, bool isDropMenu, const std::vector<int>& interactTargets, int interactSelectedIndex, const std::vector<Entity>& entities, const HazardVisuals& hazVis, Font fontMuseum, Font fontEmployee) {
     ClearBackground(BLACK);
     
-    // --- GLOBAL SCALING MATH ---
-    float screenW = (float)GetScreenWidth();
-    float screenH = (float)GetScreenHeight();
-    float scale = std::min(screenW / 1280.0f, screenH / 960.0f);
-
-    // --- DRAW THE 3D SCENE ---
+    // ==============================================================
+    // 1. EXACT ORIGINAL 3D SCENE RENDERING (Do not touch!)
+    // ==============================================================
+    float scale = std::min((float)GetScreenWidth() / GAME_WIDTH, (float)GetScreenHeight() / GAME_HEIGHT);
     Rectangle sourceRec = { 0.0f, 0.0f, (float)renderTarget.texture.width, (float)-renderTarget.texture.height };
-    Rectangle destRec = { (screenW - ((float)GAME_WIDTH * scale)) * 0.5f, (screenH - ((float)GAME_HEIGHT * scale)) * 0.5f, (float)GAME_WIDTH * scale, (float)GAME_HEIGHT * scale };
+    Rectangle destRec = { (GetScreenWidth() - ((float)GAME_WIDTH * scale)) * 0.5f, (GetScreenHeight() - ((float)GAME_HEIGHT * scale)) * 0.5f, (float)GAME_WIDTH * scale, (float)GAME_HEIGHT * scale };
     DrawTexturePro(renderTarget.texture, sourceRec, destRec, { 0, 0 }, 0.0f, WHITE);
 
+
+    // ==============================================================
+    // 2. UI SCALING & RENDERING
+    // ==============================================================
+    float screenW = (float)GetScreenWidth();
+    float screenH = (float)GetScreenHeight();
+    float uiScale = std::min(screenW / 1280.0f, screenH / 960.0f); // Use this strictly for text and menus!
+
     // --- DAY & CLOCK (Top Right) ---
-    // Calculate total in-game minutes elapsed
     float secondsPerInGameMinute = secondsPerHour / 60.0f;
     float totalInGameMinutes = shiftTimer / secondsPerInGameMinute;
     
@@ -316,26 +321,24 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
     int displayHour = (12 + hoursElapsed) % 12;
     if (displayHour == 0) displayHour = 12;
 
-    // Detailed time string: 12:43 AM
     const char* timeText = TextFormat("%02d:%02d AM", displayHour, minutesElapsed);
     const char* nightText = TextFormat("NIGHT %d", currentNight);
 
-    float clockSize = 60.0f * scale; 
-    float nightSize = 25.0f * scale; 
+    float clockSize = 60.0f * uiScale; 
+    float nightSize = 25.0f * uiScale; 
 
     Vector2 timeVec = MeasureTextEx(fontMuseum, timeText, clockSize, 1);
     Vector2 nightVec = MeasureTextEx(fontMuseum, nightText, nightSize, 1);
 
-    // --- PADDING & BOX MATH ---
-    float paddingRight = 40.0f * scale; // Distance from the right edge of the screen
-    float paddingTop = 30.0f * scale;   // Distance from the top edge of the screen
-    float verticalPadding = 15.0f * scale;
-    float horizontalPadding = 30.0f * scale; // Generous padding for both sides
+    // Box Math
+    float paddingRight = 40.0f * uiScale; 
+    float paddingTop = 30.0f * uiScale;   
+    float verticalPadding = 15.0f * uiScale;
+    float horizontalPadding = 30.0f * uiScale; 
     
     float maxTextWidth = std::max(timeVec.x, nightVec.x);
-    float totalBlockHeight = clockSize + nightSize + (5.0f * scale);
+    float totalBlockHeight = clockSize + nightSize + (5.0f * uiScale);
     
-    // The box position is calculated based on the widest piece of text
     Rectangle contrastBox = { 
         screenW - maxTextWidth - paddingRight - (horizontalPadding * 2.0f), 
         paddingTop - verticalPadding, 
@@ -343,59 +346,47 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
         totalBlockHeight + (verticalPadding * 2.0f) 
     };
 
-    // Draw the background contrast box
     DrawRectangleRounded(contrastBox, 0.15f, 8, {15, 15, 20, 180});
-    // Subtle gold accent border
     DrawRectangleRoundedLines(contrastBox, 0.15f, 8, {218, 165, 32, 120});
 
-    // --- DRAW TEXT (Centered within the padded box) ---
-    // We align the text so it's centered relative to the box's horizontal padding
     float textCenterX = contrastBox.x + (contrastBox.width / 2.0f);
-
-    // 1. Clock (Primary)
     DrawTextEx(fontMuseum, timeText, { textCenterX - (timeVec.x / 2.0f), paddingTop }, clockSize, 1, RAYWHITE);
-    
-    // 2. Night (Secondary)
-    DrawTextEx(fontMuseum, nightText, { textCenterX - (nightVec.x / 2.0f), paddingTop + clockSize + (5.0f * scale) }, nightSize, 1, {218, 165, 32, 255});
+    DrawTextEx(fontMuseum, nightText, { textCenterX - (nightVec.x / 2.0f), paddingTop + clockSize + (5.0f * uiScale) }, nightSize, 1, {218, 165, 32, 255});
+
+
     // --- PANDORA WARNING TEXT ---
     if (hazVis.pandoraWarning) {
-        float warnSize = 45.0f * scale;
+        float warnSize = 45.0f * uiScale;
         const char* warnText = "WARNING: PANDORA'S BOX IS OPEN";
         Vector2 warnVec = MeasureTextEx(fontMuseum, warnText, warnSize, 2);
-        DrawTextEx(fontMuseum, warnText, { (screenW - warnVec.x) / 2.0f, 40.0f * scale }, warnSize, 2, RED);
+        DrawTextEx(fontMuseum, warnText, { (screenW - warnVec.x) / 2.0f, 40.0f * uiScale }, warnSize, 2, RED);
         
-        float subSize = 22.0f * scale;
+        float subSize = 22.0f * uiScale;
         const char* subText = "SEAL IT WITH ANY TWO: DUCT TAPE, MJOLNIR, GLEIPNIR";
         Vector2 subVec = MeasureTextEx(fontEmployee, subText, subSize, 1);
-        DrawTextEx(fontEmployee, subText, { (screenW - subVec.x) / 2.0f, 45.0f * scale + warnSize }, subSize, 1, ORANGE);
+        DrawTextEx(fontEmployee, subText, { (screenW - subVec.x) / 2.0f, 45.0f * uiScale + warnSize }, subSize, 1, ORANGE);
     }
-    // ----------------------------
 
     // --- GLEIPNIR QTE VISUALS ---
     if (hazVis.qteActive) {
-        // Flashing dramatic red screen tint
         float flash = (sinf((float)GetTime() * 20.0f) + 1.0f) / 2.0f;
         DrawRectangle(0, 0, (int)screenW, (int)screenH, {255, 0, 0, (unsigned char)(60 * flash)});
         
-        // Giant Warning Text
         const char* qteMsg = "MASH SPACEBAR TO THROW SNAKE AWAY!";
-        float msgSize = 60.0f * scale;
+        float msgSize = 60.0f * uiScale;
         Vector2 msgVec = MeasureTextEx(fontMuseum, qteMsg, msgSize, 1);
-        DrawTextEx(fontMuseum, qteMsg, {screenW/2.0f - msgVec.x/2.0f, screenH/2.0f - (150.0f * scale)}, msgSize, 1, RED);
+        DrawTextEx(fontMuseum, qteMsg, {screenW/2.0f - msgVec.x/2.0f, screenH/2.0f - (150.0f * uiScale)}, msgSize, 1, RED);
         
-        // Countdown Timer
         const char* timeMsg = TextFormat("%.1f SECONDS LEFT!", hazVis.qteTimeLeft);
-        float tSize = 30.0f * scale;
+        float tSize = 30.0f * uiScale;
         Vector2 tVec = MeasureTextEx(fontEmployee, timeMsg, tSize, 1);
-        DrawTextEx(fontEmployee, timeMsg, {screenW/2.0f - tVec.x/2.0f, screenH/2.0f - (80.0f * scale)}, tSize, 1, WHITE);
+        DrawTextEx(fontEmployee, timeMsg, {screenW/2.0f - tVec.x/2.0f, screenH/2.0f - (80.0f * uiScale)}, tSize, 1, WHITE);
         
-        // Mashing Progress Bar
-        float barW = 600.0f * scale;
-        float barH = 40.0f * scale;
-        Rectangle barBg = {screenW/2.0f - barW/2.0f, screenH/2.0f + (50.0f * scale), barW, barH};
+        float barW = 600.0f * uiScale;
+        float barH = 40.0f * uiScale;
+        Rectangle barBg = {screenW/2.0f - barW/2.0f, screenH/2.0f + (50.0f * uiScale), barW, barH};
         DrawRectangleRounded(barBg, 0.5f, 10, {50, 0, 0, 200});
         
-        // Foreground progress fill
         Rectangle barFg = {barBg.x, barBg.y, barW * hazVis.qteProgress, barH};
         DrawRectangleRounded(barFg, 0.5f, 10, GREEN);
         DrawRectangleRoundedLines(barBg, 0.5f, 10, {255, 255, 255, 255});
@@ -405,44 +396,37 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
     for (const auto& ent : entities) {
         if (ent.isGrabbed && (ent.HasTag(TAG_TAPE) || ent.HasTag(TAG_BUBBLE_WRAP))) {
             const char* usesText = TextFormat("%s USES LEFT: %d", ent.name.c_str(), (int)ent.stateTimer);
-            float useSize = 25.0f * scale;
+            float useSize = 25.0f * uiScale;
             Vector2 useVec = MeasureTextEx(fontEmployee, usesText, useSize, 1);
             Color c = (ent.stateTimer > 0) ? GREEN : RED;
-            DrawTextEx(fontEmployee, usesText, { screenW / 2.0f - useVec.x / 2.0f, screenH - (100.0f * scale) }, useSize, 1, c);
+            DrawTextEx(fontEmployee, usesText, { screenW / 2.0f - useVec.x / 2.0f, screenH - (100.0f * uiScale) }, useSize, 1, c);
         }
     }
 
     // --- INTERACTION MENU ---
     if (showInteractMenu) {
-        float menuW = 400.0f * scale; 
-        float itemH = 60.0f * scale; 
-        float menuH = (80.0f * scale) + (interactTargets.size() * itemH);
+        float menuW = 400.0f * uiScale; 
+        float itemH = 60.0f * uiScale; 
+        float menuH = (80.0f * uiScale) + (interactTargets.size() * itemH);
         float menuX = screenW / 2.0f - menuW / 2.0f; 
         float menuY = screenH / 2.0f - menuH / 2.0f;
 
-        // --- DRAW BACKGROUND PANEL ---
         Rectangle panelRec = {menuX, menuY, menuW, menuH};
-        DrawRectangleRounded(panelRec, 0.1f, 10, {15, 15, 20, 240}); // Sleek dark base
-        DrawRectangleRoundedLines(panelRec, 0.1f, 10, {218, 165, 32, 255}); // Gold border
+        DrawRectangleRounded(panelRec, 0.1f, 10, {15, 15, 20, 240}); 
+        DrawRectangleRoundedLines(panelRec, 0.1f, 10, {218, 165, 32, 255}); 
         
-        // --- DRAW TITLE ---
         const char* title = isDropMenu ? "PLACE ITEM ON:" : "INTERACT WITH?";
-        float titleSize = 28.0f * scale;
+        float titleSize = 28.0f * uiScale;
         Vector2 titleVec = MeasureTextEx(fontMuseum, title, titleSize, 1);
-        DrawTextEx(fontMuseum, title, { menuX + menuW/2.0f - titleVec.x/2.0f, menuY + (25.0f * scale) }, titleSize, 1, {218, 165, 32, 255});
+        DrawTextEx(fontMuseum, title, { menuX + menuW/2.0f - titleVec.x/2.0f, menuY + (25.0f * uiScale) }, titleSize, 1, {218, 165, 32, 255});
 
-        // --- DRAW MENU ITEMS ---
-        float textSize = 22.0f * scale;
+        float textSize = 22.0f * uiScale;
         for (size_t i = 0; i < interactTargets.size(); ++i) {
-            Rectangle itemRec = { menuX + (20.0f * scale), menuY + (80.0f * scale) + i * itemH, menuW - (40.0f * scale), itemH - (10.0f * scale) };
-            
+            Rectangle itemRec = { menuX + (20.0f * uiScale), menuY + (80.0f * uiScale) + i * itemH, menuW - (40.0f * uiScale), itemH - (10.0f * uiScale) };
             bool isSelected = (i == interactSelectedIndex);
             
-            if (isSelected) {
-                DrawRectangleRounded(itemRec, 0.2f, 8, {218, 165, 32, 200}); // Golden Highlight
-            } else {
-                DrawRectangleRounded(itemRec, 0.2f, 8, {40, 40, 50, 200}); // Unselected gray
-            }
+            if (isSelected) DrawRectangleRounded(itemRec, 0.2f, 8, {218, 165, 32, 200}); 
+            else DrawRectangleRounded(itemRec, 0.2f, 8, {40, 40, 50, 200}); 
             
             std::string targetName = entities[interactTargets[i]].name;
             Vector2 textVec = MeasureTextEx(fontEmployee, targetName.c_str(), textSize, 1);

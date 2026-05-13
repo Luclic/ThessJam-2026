@@ -118,7 +118,7 @@ inline std::unordered_map<std::string, std::vector<BoundingBox>> GetGlobalHitbox
         {"Cardboard Boxes", {
             {{-60.0, 0.0, -40.0}, {60.0, 145.0, 55.0}},
         }},
-        {"Time Hotel 5.25 Painters Tape", {
+        {"Painters Tape", {
             {{-20.0, 0.0, 5.0}, {20.0, 40.0, 15.0}},
         }},
         {"Saw", {
@@ -279,7 +279,7 @@ inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {
         {"artifactsign1", {100.0, {0.0, 0.0, 0.0}, 0.0}},
         {"artifactsign2", {100.0, {0.0, 0.0, 0.0}, 0.0}},
         {"Cardboard Boxes", {100.0, {0.0, 0.0, 0.0}, 0.0}},
-        {"Time Hotel 5.25 Painters Tape", {5.0, {0.0, 20.0, 0.0}, 0.0}},
+        {"Painters Tape", {5.0, {0.0, 20.0, 0.0}, 0.0}},
         {"Saw", {5.0, {0.0, 0.0, 0.0}, 0.0}},
         {"Pixel Sunglasses", {20.0, {0.0, 0.0, 0.0}, 0.0}},
         {"Sunglasses", {80.0, {0.0, 10.0, 0.0}, 0.0}},

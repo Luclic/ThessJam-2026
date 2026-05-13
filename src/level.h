@@ -1250,9 +1250,9 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "Shelves", {940.0, 0.0, 1430.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
     e.back().boundsList = globalHitboxes["Shelves"];
     e.back().interactBoundsList = globalHitboxes["Shelves"];
-    e.push_back({ "Time Hotel 5.25 Painters Tape", {990.0, 193.0, 1470.0}, {0,0,0}, {0,0,1}, {}, {}, {0,121,241,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
-    e.back().boundsList = globalHitboxes["Time Hotel 5.25 Painters Tape"];
-    e.back().interactBoundsList = globalHitboxes["Time Hotel 5.25 Painters Tape"];
+    e.push_back({ "Painters Tape", {990.0, 193.0, 1470.0}, {0,0,0}, {0,0,1}, {}, {}, {0,121,241,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
+    e.back().boundsList = globalHitboxes["Painters Tape"];
+    e.back().interactBoundsList = globalHitboxes["Painters Tape"];
     e.push_back({ "Saw", {940.0, 104.0, 1460.0}, {0,0,0}, {0,0,1}, {}, {}, {130,130,130,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
     e.back().boundsList = globalHitboxes["Saw"];
     e.back().interactBoundsList = globalHitboxes["Saw"];
