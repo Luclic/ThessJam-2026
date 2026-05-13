@@ -21,11 +21,11 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Mjolnir") { e.AddTag(TAG_MJOLNIR); e.AddTag(TAG_HEAVY); e.canGrab = false; e.name = "mjolner"; }
         else if (e.name == "Sandal") { e.AddTag(TAG_SANDALS); e.canGrab = true; e.canThrow = true; e.name = "Sandal"; } 
         else if (e.name == "Banshee Stone") { e.AddTag(TAG_BANSHEE_STONE); e.canGrab = true; e.canThrow = true; e.name = "rocks"; }
-        else if (e.name == "Gleipnir Ribbon") { e.AddTag(TAG_GLEIPNIR); e.name = "Snake"; } 
+        else if (e.name == "Gleipnir Ribbon") { e.AddTag(TAG_GLEIPNIR); e.canGrab = true; e.canThrow = true; e.name = "Snake"; } 
 
         // --- EGYPTIAN ROOM ---
         else if (e.name == "Sun Disk") { e.AddTag(TAG_SUN_DISK); e.AddTag(TAG_HEAT_SOURCE); e.canGrab = false; e.name = "Coin"; }
-        else if (e.name == "Anubis" || e.name == "Anubis Statue") { e.AddTag(TAG_MUMMY); e.name = "Anubis Statue"; } // Matches both names!
+        else if (e.name == "Anubis" || e.name == "Anubis Statue") { e.name = "Anubis Statue"; } // Matches both names!
         else if (e.name == "Mummy") { e.AddTag(TAG_MUMMY); e.name = "mummy"; } 
         else if (e.name == "Sphinx") { e.AddTag(TAG_SPHINX); } 
         else if (e.name == "Sphinx Nose") { e.AddTag(TAG_SPHINX_NOSE); e.canGrab = true; } 
@@ -34,8 +34,13 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         // --- GREEK ROOM ---
         else if (e.name == "Medusa") { e.AddTag(TAG_MEDUSA); e.name = "medusa"; } 
         else if (e.name == "Zeus Statue") { e.AddTag(TAG_ZEUS); e.isStatic = true; e.canGrab = false; e.isSolid = true; e.name = "zeus"; } 
-        else if (e.name == "Lightning Bolt") { e.AddTag(TAG_LIGHTNING); e.canGrab = false; e.name = "lightning"; } 
-        else if (e.name == "Display Vase") { e.AddTag(TAG_FRAGILE); e.canGrab = true; e.canThrow = true; e.name = "Tall Vase"; }
+// --- NEW FIX: Force alpha to 255 so the graphics engine doesn't skip it! ---
+        else if (e.name == "lightning") { 
+            e.AddTag(TAG_LIGHTNING); 
+            e.canGrab = true; 
+            e.name = "lightning"; 
+            e.color.a = 255; // Force 100% opacity
+        }        else if (e.name == "Display Vase") { e.AddTag(TAG_FRAGILE); e.canGrab = true; e.canThrow = true; e.name = "Tall Vase"; }
         else if (e.name == "Chalice") { e.AddTag(TAG_WATER_SOURCE); e.canGrab = true; e.canThrow = true; e.name = "Chalice"; } 
         else if (e.name == "Sisyphus Boulder") { e.AddTag(TAG_BOULDER); e.AddTag(TAG_HEAVY); e.name = "Rock"; }
         else if (e.name == "Aeolus Bag") { e.AddTag(TAG_WIND_BAG); e.canGrab = true; e.canThrow = true; e.name = "Coin Pouch"; }
@@ -45,7 +50,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
             e.AddTag(TAG_PANDORA); 
             e.canGrab = false; 
             e.isSolid = true; 
-            e.name = "pandora"; 
+            e.name = "pandora";
         }
 
         // --- TOOLS & JANITOR ARSENAL ---
@@ -119,10 +124,10 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
         else if (e.name == "Floor B (Press C)") e.name = "floor12";
         else if (e.name == "Arch (Press C)") e.name = "arch1";
         else if (e.name == "ArchArch (Press C)") e.name = "archarch1";
-        else if (e.name == "Pedestal 1") e.name = "stand1";
-        else if (e.name == "Pedestal 2") e.name = "stand2";
-        else if (e.name == "Pedestal 3") e.name = "stand3";
-        else if (e.name == "Pedestal 4") e.name = "stand4";
+        else if (e.name == "Pedestal 1") { e.name = "stand1"; e.isStatic = true; }
+        else if (e.name == "Pedestal 2") { e.name = "stand2"; e.isStatic = true; }
+        else if (e.name == "Pedestal 3") { e.name = "stand3"; e.isStatic = true; }
+        else if (e.name == "Pedestal 4") { e.name = "stand4"; e.isStatic = true; }
         else if (e.name == "Bench 1") e.name = "bench1";
         else if (e.name == "Bench 2") e.name = "bench2";
         else if (e.name == "Bench 3" || e.name == "bench3") e.name = "bench3";
@@ -163,6 +168,7 @@ inline void AssignEntityRules(std::vector<Entity>& entities) {
 
         else if (e.name == "Fuse Box") { 
             e.name = "Fuse Box"; 
+            e.AddTag(TAG_FUSEBOX);
             e.isSolid = true; 
             e.isStatic = true; 
         }
@@ -205,8 +211,10 @@ inline ChemResult CanProcessChemistry(int toolIdx, int targetIdx, const std::vec
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) return CHEM_USED_BUT_KEPT;   // Wrap the mummy
     if (tool.HasTag(TAG_CORK) && target.HasTag(TAG_WATER_SOURCE)) return CHEM_ATTACHED; // Plug the trident puddle
     if (tool.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_MEDUSA)) return CHEM_ATTACHED;
+    if (tool.HasTag(TAG_HANDBOOK) && target.name.find("artifactsign") != std::string::npos) return CHEM_ATTACHED;
     // ZEUS SOCKET LOGIC: Can put Lightning OR any Petrified item into Zeus's hand
     if (target.HasTag(TAG_ZEUS) && (tool.HasTag(TAG_LIGHTNING) || tool.isStone)) return CHEM_ATTACHED;
+    if (tool.HasTag(TAG_LIGHTNING) && target.HasTag(TAG_FUSEBOX)) return CHEM_ATTACHED;
     
     return CHEM_NONE;
 }
@@ -281,10 +289,20 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         tool.attachedTo = targetIdx; target.isGlitching = false; return CHEM_ATTACHED;
     }
 
+    if (tool.HasTag(TAG_HANDBOOK) && target.name.find("artifactsign") != std::string::npos) {
+        tool.attachedTo = targetIdx; 
+        return CHEM_ATTACHED;
+    }
+
     // Give item to Zeus
     if (target.HasTag(TAG_ZEUS) && (tool.HasTag(TAG_LIGHTNING) || tool.isStone)) {
         tool.attachedTo = targetIdx; 
         tool.position = { target.position.x - 40.0f, target.position.y + 120.0f, target.position.z }; // Place in hand
+        return CHEM_ATTACHED;
+    }
+
+    if (tool.HasTag(TAG_LIGHTNING) && target.HasTag(TAG_FUSEBOX)) {
+        tool.attachedTo = targetIdx; 
         return CHEM_ATTACHED;
     }
 

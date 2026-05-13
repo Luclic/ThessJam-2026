@@ -1397,7 +1397,7 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "Mummy", {2350.0, 0.0, -1140.0}, {0,0,0}, {0,0,1}, {}, {}, {211,176,131,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 270.0, {} });
     e.back().boundsList = globalHitboxes["mummy"];
     e.back().interactBoundsList = globalHitboxes["mummy"];
-    e.push_back({ "Gleipnir Ribbon", {2260.0, 20.0, 2090.0}, {0,0,0}, {0,0,1}, {}, {}, {230,41,55,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 39.0, {} });
+    e.push_back({ "Gleipnir Ribbon", {2260.0, 20.0, 2090.0}, {0,0,0}, {0,0,1}, {}, {}, {230,41,55,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 179.5, {} });
     e.back().boundsList = globalHitboxes["Snake"];
     e.back().interactBoundsList = globalHitboxes["Snake"];
     e.push_back({ "Sphinx", {1790.0, 0.0, -1010.0}, {0,0,0}, {0,0,1}, {}, {}, {255,203,0,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
@@ -1928,18 +1928,6 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "Pedestal 4", {2260.0, 0.0, 2090.0}, {0,0,0}, {0,0,1}, {}, {}, {130,130,130,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
     e.back().boundsList = globalHitboxes["stand4"];
     e.back().interactBoundsList = globalHitboxes["stand4"];
-    e.push_back({ "Fence", {2260.0, 0.0, 1980.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
-    e.back().boundsList = globalHitboxes["fence"];
-    e.back().interactBoundsList = globalHitboxes["fence"];
-    e.push_back({ "Fence", {2380.0, 0.0, 2070.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
-    e.back().boundsList = globalHitboxes["fence"];
-    e.back().interactBoundsList = globalHitboxes["fence"];
-    e.push_back({ "Fence", {2260.0, 0.0, 2210.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 0.0, {} });
-    e.back().boundsList = globalHitboxes["fence"];
-    e.back().interactBoundsList = globalHitboxes["fence"];
-    e.push_back({ "Fence", {2140.0, 0.0, 2090.0}, {0,0,0}, {0,0,1}, {}, {}, {127,106,79,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
-    e.back().boundsList = globalHitboxes["fence"];
-    e.back().interactBoundsList = globalHitboxes["fence"];
     e.push_back({ "Artifact Sign 1", {2340.0, 0.0, 1970.0}, {0,0,0}, {0,0,1}, {}, {}, {200,200,200,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 200.5, {} });
     e.back().boundsList = globalHitboxes["artifactsign1"];
     e.back().interactBoundsList = globalHitboxes["artifactsign1"];
@@ -2189,4 +2177,10 @@ inline void InitLevel(std::vector<Entity>& e) {
     e.push_back({ "floor42", {1070.0, 0.0, 1020.0}, {0,0,0}, {0,0,1}, {}, {}, {200,200,200,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 90.0, {} });
     e.back().boundsList = globalHitboxes["floor12"];
     e.back().interactBoundsList = globalHitboxes["floor12"];
+    e.push_back({ "Artifact Sign 1", {2730.0, 0.0, 1980.0}, {0,0,0}, {0,0,1}, {}, {}, {200,200,200,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 200.5, {} });
+    e.back().boundsList = globalHitboxes["artifactsign1"];
+    e.back().interactBoundsList = globalHitboxes["artifactsign1"];
+    e.push_back({ "lightning", {2260.0, 279.0, 470.0}, {0,0,0}, {0,0,1}, {}, {}, {253,249,0,255}, false, false, false, true, false, true, false, false, -1, false, false, false, false, 0.0, 180.0, {} });
+    e.back().boundsList = globalHitboxes["lightning"];
+    e.back().interactBoundsList = globalHitboxes["lightning"];
 }

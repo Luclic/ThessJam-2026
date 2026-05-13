@@ -43,7 +43,7 @@ int grabbedEntityIndex = -1;
 int equippedEyewear = -1; 
 int equippedGloves = -1; 
 
-int currentNight = 1;
+int currentNight = 4;
 float shiftTimer = 0.0f;
 ShiftReport lastReport;
 
@@ -130,7 +130,7 @@ int main(void) {
     EndDrawing();
     // ----------------------------------------------
 
-    currentNight = 1; 
+    currentNight = 4; 
     std::ifstream saveFile("museum_save.dat", std::ios::binary);
     if (saveFile.is_open()) {
         saveFile.read((char*)&currentNight, sizeof(currentNight));
@@ -194,7 +194,7 @@ int main(void) {
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
         "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
-        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin", "sarcophagus", "Viking Boat", "Shield Round"
+        "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin", "sarcophagus", "Viking Boat", "Shield Round", "Fuse Box"
     
     };
     for (const char* mn : modelNames) { 
@@ -242,7 +242,7 @@ int main(void) {
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
     InitLevel(entities);
-    if (!LoadGame(currentNight, entities)) currentNight = 1; 
+    if (!LoadGame(currentNight, entities)) currentNight = 4; 
     camera.zoom = 1.0f;
 
     GoToMenu();
@@ -307,7 +307,6 @@ int main(void) {
         }
 
         if (currentState == STATE_GAMEOVER_FIRED) {
-            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 2.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
             BeginDrawing(); ClearBackground(MAROON);
             DrawText("YOU'RE FIRED.", GetScreenWidth()/2 - 150, 200, 50, WHITE);
             DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
@@ -317,7 +316,6 @@ int main(void) {
         }
 
         if (currentState == STATE_GAMEOVER_DEATH) {
-            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 1.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
             BeginDrawing(); ClearBackground(RED);
             DrawText("YOU DIED.", GetScreenWidth()/2 - 120, 200, 50, BLACK);
             DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
@@ -365,13 +363,24 @@ int main(void) {
                 if (showInteractMenu) {
                     if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) interactSelectedIndex = (interactSelectedIndex - 1 + interactTargets.size()) % interactTargets.size();
                     if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) interactSelectedIndex = (interactSelectedIndex + 1) % interactTargets.size();
+                    
                     bool clicked = false;
                     Vector2 mousePos = GetMousePosition();
-                    float menuW = 400; float itemH = 50; float menuH = 60 + interactTargets.size() * itemH;
-                    float menuX = GetScreenWidth() / 2.0f - menuW / 2.0f; float menuY = GetScreenHeight() / 2.0f - menuH / 2.0f;
+                    
+                    // --- DYNAMIC SCALING FOR MOUSE CLICKS ---
+                    float screenW = (float)GetScreenWidth();
+                    float screenH = (float)GetScreenHeight();
+                    float scale = std::min(screenW / 1280.0f, screenH / 960.0f);
+                    
+                    float menuW = 400.0f * scale; 
+                    float itemH = 60.0f * scale; 
+                    float menuH = (80.0f * scale) + (interactTargets.size() * itemH);
+                    float menuX = screenW / 2.0f - menuW / 2.0f; 
+                    float menuY = screenH / 2.0f - menuH / 2.0f;
 
                     for (size_t i = 0; i < interactTargets.size(); ++i) {
-                        if (CheckCollisionPointRec(mousePos, { menuX + 20, menuY + 60 + i * itemH, menuW - 40, itemH - 10 })) {
+                        Rectangle itemRec = { menuX + (20.0f * scale), menuY + (80.0f * scale) + i * itemH, menuW - (40.0f * scale), itemH - (10.0f * scale) };
+                        if (CheckCollisionPointRec(mousePos, itemRec)) {
                             if (Vector2Length(GetMouseDelta()) > 0.1f) interactSelectedIndex = i; 
                             if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
                         }
@@ -380,7 +389,7 @@ int main(void) {
                         executeAction = true; actionTargetIdx = interactTargets[interactSelectedIndex]; showInteractMenu = false;
                     }
                     if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) showInteractMenu = false;
-                } 
+                }
             }
 
             if (!showInteractMenu && !player.isStone && !player.isDead) {
@@ -686,8 +695,7 @@ int main(void) {
             UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart, fontMuseum, fontEmployee, currentNight); 
             SetMusicVolume(mainMusic, mainMusicVolume); SetMusicVolume(tutorialMusic, mainMusicVolume);
         } else {
-            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities, hazVis);
-            
+            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities, hazVis, fontMuseum, fontEmployee);            
             if (currentState == STATE_TUTORIAL && !isOverlayActive) {
                 bool tutorialFinished = false;
                 UpdateAndRenderTutorial((int&)currentState, entities, grabbedEntityIndex, equippedEyewear, shiftTimer, tutorialFinished, tutorialStep, playerJumpedThisFrame, fontMuseum, fontEmployee);            

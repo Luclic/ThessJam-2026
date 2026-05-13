@@ -1,13 +1,4 @@
-dre-add all the current 2D systems like saving etc.
-
-
-Lost and found room/museum entrance
-+ modern art sticker
 +leaving items out/mess penalty
-light switch/fuse box.
-
-auto-open doors based on night
-
 cork doesnt stop flow of water in chalice.
 
 Glitch: walk diagonally while jumping and get teleported on top of wall
@@ -15,38 +6,10 @@ make later room walls have better positions
 
 shader
 
-add general flow of the game: 5 nights, 3 minutes each.
-tutorial: before first night, no real time limit, teaches control and concept.
-
-find the missing models
-
-SAVE SYSTEM!!!
-
-
-design wise:
-
-shader
-start menu 
-models for everything
-every screen
-museum design
-
-
-
-myth and Mop
-hazardous myths
-Mythic Maintenance
-
-
 fonts: courrier prime for employee handbook, Playfair Display for museum stuff, inter for online stuff
 
-
-mummy has limbs glitching on animation, need to fix on blender (something to do with max something per something limit is 4 on raylib.)
-
-
 BUGS
-No music on tutorial/ General fix for tutorial
-water needs fixing, fire extiniguisher sound, 
+fire extiniguisher sound, 
 pinakes, scale waterfall, aiolus bag, keraunos threeD model, mummy bed
 things fall through things
 
@@ -83,3 +46,7 @@ banshee stone
 sun Disk
 mummy
 fuse box!!!
+
+add some visual effect to aeolus bag
+
+fix death message reason

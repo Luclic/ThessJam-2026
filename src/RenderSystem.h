@@ -99,25 +99,6 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
                 }
             }
         }
-
-
-        // --- WIND BAG VISUAL EFFECT (Expanding Gust Rings) ---
-        if (e->HasTag(TAG_WIND_BAG) && e->isGlitching && !e->HasTag(TAG_BROKEN)) {
-            float timeSec = (float)GetTime();
-            
-            // Draw 3 animated rings that constantly expand outward
-            for (int r = 0; r < 3; r++) {
-                // Math to make them loop endlessly from 0 to 600 radius
-                float ringRadius = fmod((timeSec * 350.0f) + (r * 200.0f), 600.0f); 
-                
-                // Make them fade out transparently as they get larger
-                float fade = 1.0f - (ringRadius / 600.0f); 
-                
-                // Draw the wind rings slightly off the floor
-                DrawCylinderWires({e->position.x, e->position.y + 20.0f, e->position.z}, ringRadius, ringRadius, 2.0f, 24, {200, 220, 255, (unsigned char)(200 * fade)});
-            }
-        }
-        // -----------------------------------------------------
     }
     EndMode3D();
     EndTextureMode();
@@ -172,17 +153,20 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
 
             Vector3 finalScale = (Vector3){tweak.scale, tweak.scale, tweak.scale};
             DrawModelEx(modIt->second, pos3D, {0, 1, 0}, finalRot, finalScale, WHITE);
-            } else {
-            // PLACEHOLDER SYSTEM
-            Color drawCol = e->color;
+        } else {
+            // --- NEW FIX: BRIGHT PINK PLACEHOLDER SYSTEM ---
+            // Force the color to MAGENTA so it's impossible to miss!
+            Color drawCol = MAGENTA; 
             std::vector<BoundingBox> projected = e->GetWorldBounds();
             
             for(const auto& b : projected) {
                 Vector3 size = { b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z };
                 if (size.x > 0 && size.y > 0 && size.z > 0) {
                     Vector3 center = { b.min.x + size.x/2.0f, b.min.y + size.y/2.0f, b.min.z + size.z/2.0f };
+                    
+                    // Draw a semi-transparent bright pink cube with solid pink wires
                     DrawCubeV(center, size, Fade(drawCol, 0.8f));
-                    DrawCubeWiresV(center, size, BLACK);
+                    DrawCubeWiresV(center, size, PINK);
                     
                     Vector3 toObj = Vector3Subtract(center, cam3D.position);
                     Vector3 camForward = Vector3Subtract(cam3D.target, cam3D.position);
@@ -206,6 +190,35 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
         }
         // -----------------------------------------------------------------
 
+        // --- NEW FIX: AEOLUS TORNADO VISUAL EFFECT (Solid & Smooth) ---
+        if (e->HasTag(TAG_WIND_BAG) && e->isGlitching && !e->HasTag(TAG_BROKEN)) {
+            float timeSec = (float)GetTime();
+            
+            // Use 3 solid, semi-transparent cones layered together.
+            // Slowing down the animation speed significantly (0.4f instead of 1.5f) to prevent dizziness.
+            for (int r = 0; r < 3; r++) {
+                // Slower expansion phase
+                float t = fmod((timeSec * 0.4f) + (r * 0.333f), 1.0f); 
+                
+                // Smoother, less aggressive expansion
+                float topRadius = 50.0f + (t * 200.0f);
+                float bottomRadius = 10.0f + (t * 15.0f);
+                float height = 100.0f + (t * 200.0f);
+                
+                // Sine wave for smooth pulsating opacity (peaks in the middle, fades gently at start/end)
+                float fade = sinf(t * PI); 
+                
+                Vector3 tornadoPos = {e->position.x, e->position.y + (height / 2.0f), e->position.z};
+                
+                // 1. Draw solid, translucent geometry! No more spiderwebs.
+                // 12 slices gives it a nice stylized, low-poly "gale" look.
+                DrawCylinder(tornadoPos, topRadius, bottomRadius, height, 12, {150, 200, 255, (unsigned char)(60 * fade)});
+                
+                // 2. Add a very minimal, low-opacity thick outline (only 6 slices) to give it a slow swirling texture
+                DrawCylinderWires(tornadoPos, topRadius + 5.0f, bottomRadius + 5.0f, height, 6, {200, 230, 255, (unsigned char)(30 * fade)});
+            }
+        }
+        // --------------------------------------------------------------
         if (e->HasTag(TAG_BANSHEE_STONE) && e->stateValue > 0.0f) DrawCylinderWires({e->position.x, e->position.y, e->position.z}, e->stateValue, e->stateValue, 1.0f, 16, {200, 100, 255, (unsigned char)(std::max(0.0f, 255.0f - (e->stateValue / 800.0f) * 255.0f))});
         
         if (e->isUsing && e->HasTag(TAG_FLASHLIGHT)) {
@@ -262,18 +275,24 @@ inline void RenderWorld(RenderTexture2D renderTarget, Camera2D& camera, float dt
 
     BeginMode2D(camera);
     for (const auto& e : entities) {
-        if (e.HasTag(TAG_LIGHTSWITCH) && e.stateValue < 0.5f) {
-            int rx = (int)std::floor(e.position.x / GAME_WIDTH); int ry = (int)std::floor(e.position.z / GAME_HEIGHT);
+        // --- NEW FIX: Darken screen for BOTH Lightswitches and Fuseboxes! ---
+        if ((e.HasTag(TAG_LIGHTSWITCH) || e.HasTag(TAG_FUSEBOX)) && e.stateValue < 0.5f) {
+            int rx = (int)std::floor(e.position.x / GAME_WIDTH); 
+            int ry = (int)std::floor(e.position.z / GAME_HEIGHT);
             bool hasFlashlight = false;
             for(const auto& item : entities) if(item.isGrabbed && item.isUsing && item.HasTag(TAG_FLASHLIGHT)) hasFlashlight = true;
-            DrawRectangle(rx * GAME_WIDTH, ry * GAME_HEIGHT, GAME_WIDTH, GAME_HEIGHT, {0, 0, 0, (unsigned char)(hasFlashlight ? 180 : 230)});
+            
+            // 252 is almost entirely pitch black! 
+            // 190 leaves a dim, spooky cone if you have your flashlight turned on.
+            unsigned char alphaValue = hasFlashlight ? 190 : 210;
+            DrawRectangle(rx * GAME_WIDTH*8, ry * GAME_HEIGHT*8, GAME_WIDTH, GAME_HEIGHT, {0, 0, 0, alphaValue});
         }
     }
     EndMode2D(); 
     EndTextureMode();
 }
 
-inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float secondsPerHour, int currentNight, const Entity& player, bool showInteractMenu, bool isDropMenu, const std::vector<int>& interactTargets, int interactSelectedIndex, const std::vector<Entity>& entities, const HazardVisuals& hazVis) {
+inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float secondsPerHour, int currentNight, const Entity& player, bool showInteractMenu, bool isDropMenu, const std::vector<int>& interactTargets, int interactSelectedIndex, const std::vector<Entity>& entities, const HazardVisuals& hazVis, Font fontMuseum, Font fontEmployee) {
     ClearBackground(BLACK);
     float scale = std::min((float)GetScreenWidth() / GAME_WIDTH, (float)GetScreenHeight() / GAME_HEIGHT);
     Rectangle sourceRec = { 0.0f, 0.0f, (float)renderTarget.texture.width, (float)-renderTarget.texture.height };
@@ -303,32 +322,88 @@ inline void RenderHUD(RenderTexture2D renderTarget, float shiftTimer, float seco
     }
     // ----------------------------
 
+    // --- GLEIPNIR QTE VISUALS ---
+    if (hazVis.qteActive) {
+        float screenW = (float)GetScreenWidth();
+        float screenH = (float)GetScreenHeight();
+        float scale = std::min(screenW / 1280.0f, screenH / 960.0f);
+        
+        // Flashing dramatic red screen tint
+        float flash = (sinf((float)GetTime() * 20.0f) + 1.0f) / 2.0f;
+        DrawRectangle(0, 0, (int)screenW, (int)screenH, {255, 0, 0, (unsigned char)(60 * flash)});
+        
+        // Giant Warning Text
+        const char* qteMsg = "MASH SPACEBAR TO THROW SNAKE AWAY!";
+        float msgSize = 60.0f * scale;
+        Vector2 msgVec = MeasureTextEx(fontMuseum, qteMsg, msgSize, 1);
+        DrawTextEx(fontMuseum, qteMsg, {screenW/2.0f - msgVec.x/2.0f, screenH/2.0f - (150.0f * scale)}, msgSize, 1, RED);
+        
+        // Countdown Timer
+        const char* timeMsg = TextFormat("%.1f SECONDS LEFT!", hazVis.qteTimeLeft);
+        float tSize = 30.0f * scale;
+        Vector2 tVec = MeasureTextEx(fontEmployee, timeMsg, tSize, 1);
+        DrawTextEx(fontEmployee, timeMsg, {screenW/2.0f - tVec.x/2.0f, screenH/2.0f - (80.0f * scale)}, tSize, 1, WHITE);
+        
+        // Mashing Progress Bar
+        float barW = 600.0f * scale;
+        float barH = 40.0f * scale;
+        Rectangle barBg = {screenW/2.0f - barW/2.0f, screenH/2.0f + (50.0f * scale), barW, barH};
+        DrawRectangleRounded(barBg, 0.5f, 10, {50, 0, 0, 200});
+        
+        // Foreground progress fill
+        Rectangle barFg = {barBg.x, barBg.y, barW * hazVis.qteProgress, barH};
+        DrawRectangleRounded(barFg, 0.5f, 10, GREEN);
+        DrawRectangleRoundedLines(barBg, 0.5f, 10, {255, 255, 255, 255});
+    }
+
     for (const auto& ent : entities) {
         if (ent.isGrabbed && (ent.HasTag(TAG_TAPE) || ent.HasTag(TAG_BUBBLE_WRAP))) {
             DrawText(TextFormat("%s USES LEFT: %d", ent.name.c_str(), (int)ent.stateValue), GetScreenWidth() / 2 - 100, GetScreenHeight() - 50, 20, (ent.stateValue > 0) ? GREEN : RED);
         }
     }
 
+    // Add fontMuseum and fontEmployee to your RenderHUD arguments!
+    
     if (showInteractMenu) {
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), {0, 0, 0, 150});
-        float menuW = 400; float itemH = 50;
-        float menuH = 60 + interactTargets.size() * itemH;
-        float menuX = GetScreenWidth() / 2.0f - menuW / 2.0f;
-        float menuY = GetScreenHeight() / 2.0f - menuH / 2.0f;
+        float screenW = (float)GetScreenWidth();
+        float screenH = (float)GetScreenHeight();
+        float scale = std::min(screenW / 1280.0f, screenH / 960.0f);
+        
+        float menuW = 400.0f * scale; 
+        float itemH = 60.0f * scale; 
+        float menuH = (80.0f * scale) + (interactTargets.size() * itemH);
+        float menuX = screenW / 2.0f - menuW / 2.0f; 
+        float menuY = screenH / 2.0f - menuH / 2.0f;
 
-        DrawRectangle(menuX, menuY, menuW, menuH, {40, 40, 40, 240});
-        DrawRectangleLines(menuX, menuY, menuW, menuH, WHITE);
-        DrawText(isDropMenu ? "SELECT TARGET:" : "SELECT ITEM:", menuX + 20, menuY + 20, 20, RAYWHITE);
+        // --- DRAW BACKGROUND PANEL ---
+        Rectangle panelRec = {menuX, menuY, menuW, menuH};
+        DrawRectangleRounded(panelRec, 0.1f, 10, {15, 15, 20, 240}); // Sleek dark base
+        DrawRectangleRoundedLines(panelRec, 0.1f, 10, {218, 165, 32, 255}); // Gold border
+        
+        // --- DRAW TITLE ---
+        const char* title = isDropMenu ? "PLACE ITEM ON:" : "INTERACT WITH?";
+        float titleSize = 28.0f * scale;
+        Vector2 titleVec = MeasureTextEx(fontMuseum, title, titleSize, 1);
+        DrawTextEx(fontMuseum, title, { menuX + menuW/2.0f - titleVec.x/2.0f, menuY + (25.0f * scale) }, titleSize, 1, {218, 165, 32, 255});
 
+        // --- DRAW MENU ITEMS ---
+        float textSize = 22.0f * scale;
         for (size_t i = 0; i < interactTargets.size(); ++i) {
-            Rectangle itemRec = { menuX + 20, menuY + 60 + i * itemH, menuW - 40, itemH - 10 };
-            Color btnColor = (interactSelectedIndex == i) ? DARKGRAY : GRAY;
-            if (CheckCollisionPointRec(GetMousePosition(), itemRec) && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) btnColor = BLACK;
-
-            DrawRectangleRec(itemRec, btnColor);
-            DrawRectangleLinesEx(itemRec, 2, (interactSelectedIndex == i) ? WHITE : LIGHTGRAY);
-            DrawText(entities[interactTargets[i]].name.c_str(), itemRec.x + 20, itemRec.y + 10, 20, WHITE);
+            Rectangle itemRec = { menuX + (20.0f * scale), menuY + (80.0f * scale) + i * itemH, menuW - (40.0f * scale), itemH - (10.0f * scale) };
+            
+            bool isSelected = (i == interactSelectedIndex);
+            
+            if (isSelected) {
+                DrawRectangleRounded(itemRec, 0.2f, 8, {218, 165, 32, 200}); // Golden Highlight
+            } else {
+                DrawRectangleRounded(itemRec, 0.2f, 8, {40, 40, 50, 200}); // Unselected gray
+            }
+            
+            std::string targetName = entities[interactTargets[i]].name;
+            Vector2 textVec = MeasureTextEx(fontEmployee, targetName.c_str(), textSize, 1);
+            
+            Color textColor = isSelected ? BLACK : WHITE;
+            DrawTextEx(fontEmployee, targetName.c_str(), { itemRec.x + itemRec.width/2.0f - textVec.x/2.0f, itemRec.y + itemRec.height/2.0f - textVec.y/2.0f }, textSize, 1, textColor);
         }
-        DrawText("W/S: Move | SPACE/CLICK: Select | E: Cancel", menuX + 10, menuY + menuH + 10, 16, LIGHTGRAY);
     }
 }

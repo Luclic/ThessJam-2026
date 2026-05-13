@@ -197,9 +197,6 @@ inline std::unordered_map<std::string, std::vector<BoundingBox>> GetGlobalHitbox
         {"zeus", {
             {{-85.0, 0.0, -160.0}, {70.0, 160.0, 60.0}},
         }},
-        {"lightning", {
-            {{-20.0, 0.0, -20.0}, {20.0, 40.0, 20.0}},
-        }},
         {"mummy", {
             {{-20.0, 0.0, -20.0}, {20.0, 210.0, 20.0}},
         }},
@@ -236,12 +233,16 @@ inline std::unordered_map<std::string, std::vector<BoundingBox>> GetGlobalHitbox
         {"Sarcophagus", {
             {{-15.0f, 0.0f, -15.0f}, {15.0f, 60.0f, 15.0f}}
         }},
+        {"lightning", {
+            {{-20.0, 0.0, -20.0}, {20.0, 40.0, 20.0}},
+        }},
     };
 }
 
 struct ModelTweak { float scale; Vector3 offset; float rot; };
 inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {
     return {
+        {"lightning", {10.0, {-94.0, -266.0, 22.0}, 0.0}},
         {"wall1", {100.0, {0.0, 0.0, 80.0}, 0.0}},
         {"wall1corner", {100.0, {0.0, 0.0, 0.0}, 0.0}},
         {"floor11", {100.0, {0.0, 0.0, 0.0}, 0.0}},
@@ -304,7 +305,6 @@ inline std::unordered_map<std::string, ModelTweak> GetGlobalTweaks() {
         {"Coin Pouch", {100.0, {0.0, 0.0, 0.0}, 0.0}},
         {"medusa", {100.0, {0.0, 56.0, 0.0}, 0.0}},
         {"zeus", {10.0, {0.0, -22.0, 0.0}, 0.0}},
-        {"lightning", {100.0, {0.0, 0.0, 0.0}, 0.0}},
         {"mummy", {30.0, {0.0, 0.0, 0.0}, 0.0}},
         {"Coffin", {100.0, {0.0, 0.0, 0.0}, 0.0}},
         {"Snake", {5.0, {0.0, 8.0, 0.0}, 0.0}},

@@ -3,7 +3,8 @@
 #include <algorithm>
 
 template <typename T>
-inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& triggerShiftStart, Font fontMuseum, Font fontEmployee, int currentNight) {
+// --- NEW FIX: Added bool& triggerNewGame to the signature ---
+inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& triggerShiftStart, bool& triggerNewGame, Font fontMuseum, Font fontEmployee, int currentNight) {
     Vector2 mousePos = GetMousePosition();
     bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
 
@@ -11,10 +12,9 @@ inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& t
     int screenH = GetScreenHeight();
 
     // --- DYNAMIC SCALING MULTIPLIERS ---
-    // Calculate sizes as a percentage of the screen height (mostly) and width
     float leftMargin = screenW * 0.08f; 
     float titleY = screenH * 0.15f;
-    float buttonsY = screenH * 0.60f;
+    float buttonsY = screenH * 0.55f; // Slightly higher to fit 3 buttons nicely
 
     float title1Size = screenH * 0.14f;  // Large title
     float title2Size = screenH * 0.05f;  // Subtitle
@@ -58,9 +58,10 @@ inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& t
         DrawTextEx(fontEmployee, title2, title2Pos, title2Size, 0, warningOrange);
 
         // --- BUTTONS ---
+        int currentButtonIndex = 0; // Dynamically pushes buttons down so there are no gaps
         
-        // START BUTTON
-        Rectangle startBtn = { leftMargin, buttonsY, btnWidth, btnHeight };
+        // 1. START / CONTINUE BUTTON
+        Rectangle startBtn = { leftMargin, buttonsY + (btnHeight + btnSpacing) * currentButtonIndex, btnWidth, btnHeight };
         bool startHover = CheckCollisionPointRec(mousePos, startBtn);
         
         if (startHover) {
@@ -76,11 +77,31 @@ inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& t
             startText = "START SHIFT";
         }
         DrawTextEx(fontMuseum, startText, { startBtn.x, startBtn.y }, fontSizeBtn, 1, startColor);
-        
         if (startHover && clicked) triggerShiftStart = true; 
+        currentButtonIndex++;
 
-        // OPTIONS BUTTON
-        Rectangle optBtn = { leftMargin, buttonsY + btnHeight + btnSpacing, btnWidth, btnHeight };
+
+        // 2. NEW GAME BUTTON (Only appears if a save file exists)
+        if (currentNight > 1) {
+            Rectangle newBtn = { leftMargin, buttonsY + (btnHeight + btnSpacing) * currentButtonIndex, btnWidth, btnHeight };
+            bool newHover = CheckCollisionPointRec(mousePos, newBtn);
+            
+            if (newHover) {
+                // Blood red hover color to signify progress will be deleted
+                DrawRectangleRec({newBtn.x - (padding*2), newBtn.y, newBtn.width, newBtn.height}, Fade(RED, 0.2f));
+                DrawRectangleRec({newBtn.x - (padding*2), newBtn.y, strokeWidth, newBtn.height}, RED);
+            }
+            
+            Color newColor = newHover ? RAYWHITE : LIGHTGRAY;
+            DrawTextEx(fontMuseum, "NEW GAME", { newBtn.x, newBtn.y }, fontSizeBtn, 1, newColor);
+            
+            if (newHover && clicked) triggerNewGame = true; 
+            currentButtonIndex++;
+        }
+
+
+        // 3. OPTIONS BUTTON
+        Rectangle optBtn = { leftMargin, buttonsY + (btnHeight + btnSpacing) * currentButtonIndex, btnWidth, btnHeight };
         bool optHover = CheckCollisionPointRec(mousePos, optBtn);
         
         if (optHover) {
@@ -90,7 +111,6 @@ inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& t
 
         Color optColor = optHover ? RAYWHITE : LIGHTGRAY;
         DrawTextEx(fontMuseum, "Options", { optBtn.x, optBtn.y }, fontSizeBtn, 1, optColor);
-        
         if (optHover && clicked) currentState = (T)1; 
         
         // FOOTER
@@ -114,7 +134,6 @@ inline void UpdateAndRenderMenu(T& currentState, float& mainMusicVolume, bool& t
         Rectangle volDown = { screenW/2.0f - volDims.x/2.0f - (screenW * 0.05f), volY - (screenH * 0.005f), ctrlSize, ctrlSize };
         bool downHover = CheckCollisionPointRec(mousePos, volDown);
         DrawRectangleLinesEx(volDown, 2, downHover ? warningOrange : Fade(GRAY, 0.5f));
-        // Centering the < and > inside the boxes dynamically
         Vector2 arrowDownDims = MeasureTextEx(fontEmployee, "<", volTextSize, 0);
         DrawTextEx(fontEmployee, "<", { volDown.x + (ctrlSize/2) - (arrowDownDims.x/2), volDown.y + (ctrlSize/2) - (arrowDownDims.y/2) }, volTextSize, 0, downHover ? warningOrange : GRAY);
         if (downHover && clicked) mainMusicVolume = std::max(0.0f, mainMusicVolume - 0.1f);

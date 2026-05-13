@@ -12,8 +12,10 @@
 #include "Menu.h"      
 #include "Tutorial.h"  
 #include "Overlay.h"   
+#include "Credits.h"
 #include <unordered_map>
 #include <string>
+#include <cstdio>
 
 const int idxIdle = 4;
 const int idxInteract = 10;
@@ -21,7 +23,7 @@ const int idxRoll = 15;
 const int idxRun = 24;
 const int idxWalk = 30;
 
-enum GameState { STATE_MENU, STATE_OPTIONS, STATE_TUTORIAL, STATE_PLAYING, STATE_REVIEW, STATE_GAMEOVER_FIRED, STATE_GAMEOVER_DEATH };
+enum GameState { STATE_MENU, STATE_OPTIONS, STATE_TUTORIAL, STATE_PLAYING, STATE_REVIEW, STATE_GAMEOVER_FIRED, STATE_GAMEOVER_DEATH, STATE_CREDITS };
 
 const float SHIFT_DURATION = 180.0f; 
 const float SECONDS_PER_HOUR = 22.5f;
@@ -43,7 +45,7 @@ int grabbedEntityIndex = -1;
 int equippedEyewear = -1; 
 int equippedGloves = -1; 
 
-int currentNight = 1;
+int currentNight = 5;
 float shiftTimer = 0.0f;
 ShiftReport lastReport;
 
@@ -130,7 +132,7 @@ int main(void) {
     EndDrawing();
     // ----------------------------------------------
 
-    currentNight = 1; 
+    currentNight = 5; 
     std::ifstream saveFile("museum_save.dat", std::ios::binary);
     if (saveFile.is_open()) {
         saveFile.read((char*)&currentNight, sizeof(currentNight));
@@ -139,8 +141,11 @@ int main(void) {
 
     InitAudioDevice();
     const char* sfxNames[] = {
-        "ducktape", "fire-extenguisher", "handsaw", "plastictap-wetfloors", 
-        "popping-bubble-wr", "sandbags-put-on-fl" 
+        "breaking-vase", "ducktape", "electric_shock", "fire-extenguisher",
+        "handsaw", "light-switch-click-on-and-off", "mjolnir-clang", "petrification",
+        "plastictap-wetfloorsign", "popping-bubble-wrap", "poseidon-water",
+        "sandbags-put-on-floor", "scream", "shulffing-paper", "sisphus-rolling",
+        "sound-of-wind", "wing-flap"
     };
     for (const char* sn : sfxNames) {
         sounds[sn] = LoadSound(TextFormat("resources/sound_effects/%s.ogg", sn)); 
@@ -213,6 +218,10 @@ int main(void) {
     UnloadImage(stoneImg);
 
     Texture2D zombieTex = LoadTexture("resources/models/ZombieTexture.png");
+    // --- NEW FIX: GENERATE YELLOW TEXTURE ---
+    Image yellowImg = GenImageColor(2, 2, {255, 220, 0, 255}); // A nice electric yellow
+    Texture2D yellowTex = LoadTextureFromImage(yellowImg);
+    UnloadImage(yellowImg);
     
     // Assign textures safely
     if (models.count("zeus")) {
@@ -223,6 +232,9 @@ int main(void) {
     }
     if (models.count("mummy")) {
         for (int i = 0; i < models["mummy"].materialCount; i++) models["mummy"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = zombieTex;
+    }
+    if (models.count("lightning")) {
+        for (int i = 0; i < models["lightning"].materialCount; i++) models["lightning"].materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = yellowTex;
     }
 
     // Apply the custom clay shader to EVERY model loaded in the game
@@ -242,7 +254,7 @@ int main(void) {
     SetTextureFilter(renderTarget.texture, TEXTURE_FILTER_BILINEAR);
 
     InitLevel(entities);
-    if (!LoadGame(currentNight, entities)) currentNight = 1; 
+    if (!LoadGame(currentNight, entities)) currentNight = 5; 
     camera.zoom = 1.0f;
 
     GoToMenu();
@@ -256,7 +268,7 @@ int main(void) {
         // --- GLOBAL AUDIO FADE SYSTEM ---
         float targetMain = 0.0f, targetTut = 0.0f, targetDeath = 0.0f, targetNews = 0.0f, targetRev = 0.0f;
         
-        if (currentState == STATE_MENU || currentState == STATE_OPTIONS || currentState == STATE_TUTORIAL) {
+        if (currentState == STATE_MENU || currentState == STATE_OPTIONS || currentState == STATE_TUTORIAL || currentState == STATE_CREDITS) {
             targetTut = mainMusicVolume;
         } else if (currentState == STATE_REVIEW) {
             targetRev = mainMusicVolume;
@@ -307,7 +319,6 @@ int main(void) {
         }
 
         if (currentState == STATE_GAMEOVER_FIRED) {
-            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 2.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
             BeginDrawing(); ClearBackground(MAROON);
             DrawText("YOU'RE FIRED.", GetScreenWidth()/2 - 150, 200, 50, WHITE);
             DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
@@ -317,7 +328,6 @@ int main(void) {
         }
 
         if (currentState == STATE_GAMEOVER_DEATH) {
-            if (mainMusicVolume > 0.0f) { mainMusicVolume -= dt * 1.0f; SetMusicVolume(mainMusic, std::max(0.0f, mainMusicVolume)); }
             BeginDrawing(); ClearBackground(RED);
             DrawText("YOU DIED.", GetScreenWidth()/2 - 120, 200, 50, BLACK);
             DrawText(lastReport.finalVerdict.c_str(), GetScreenWidth()/2 - MeasureText(lastReport.finalVerdict.c_str(), 20)/2, 300, 20, LIGHTGRAY);
@@ -329,6 +339,7 @@ int main(void) {
         Entity& player = entities[0];
         bool playerJumpedThisFrame = false; 
         bool triggerShiftStart = false;
+        bool triggerNewGame = false;
         HazardVisuals hazVis;
 
         if (!isOverlayActive) {
@@ -347,13 +358,20 @@ int main(void) {
             int actionTargetIdx = -1;
 
             if (currentState == STATE_PLAYING || currentState == STATE_TUTORIAL) {
-                if (IsKeyPressed(KEY_I)) { for (auto& e : entities) if (e.HasTag(TAG_MEDUSA)) e.isGlitching = !e.isGlitching; }
-                if (IsKeyPressed(KEY_O)) { for (auto& e : entities) if (e.HasTag(TAG_WATER_SOURCE)) e.isGlitching = !e.isGlitching; }
-                if (IsKeyPressed(KEY_P)) { for (auto& e : entities) if (e.HasTag(TAG_SANDALS)) e.isGlitching = true; }
-                if (IsKeyPressed(KEY_K)) { for (auto& e : entities) if (e.HasTag(TAG_WIND_BAG)) e.isGlitching = !e.isGlitching; }
-                if (IsKeyPressed(KEY_L)) { for (auto& e : entities) if (e.HasTag(TAG_BOULDER)) e.isGlitching = !e.isGlitching; }
-                if (IsKeyPressed(KEY_SIX)) { shiftTimer = SHIFT_DURATION; } 
-                
+
+                if (IsKeyPressed(KEY_Q) && currentNight >= 5 && grabbedEntityIndex == -1 && !isOverlayActive) {
+                    for (auto& e : entities) {
+                        if (e.HasTag(TAG_PANDORA)) {
+                            // Only check X/Z distance so pedestal height doesn't mess it up!
+                            float distXZ = Vector2Distance({player.position.x, player.position.z}, {e.position.x, e.position.z});
+                            if (distXZ < 120.0f) {
+                                currentState = STATE_CREDITS;
+                            }
+                            break;
+                        }
+                    }
+                }
+
                 for(auto& e : entities) {
                     if (e.HasTag(TAG_DOOR_1)) { e.isSolid = !doorsOpen[0]; e.color.a = doorsOpen[0] ? 30 : 255; }
                     if (e.HasTag(TAG_DOOR_2)) { e.isSolid = !doorsOpen[1]; e.color.a = doorsOpen[1] ? 30 : 255; }
@@ -365,13 +383,24 @@ int main(void) {
                 if (showInteractMenu) {
                     if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) interactSelectedIndex = (interactSelectedIndex - 1 + interactTargets.size()) % interactTargets.size();
                     if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) interactSelectedIndex = (interactSelectedIndex + 1) % interactTargets.size();
+                    
                     bool clicked = false;
                     Vector2 mousePos = GetMousePosition();
-                    float menuW = 400; float itemH = 50; float menuH = 60 + interactTargets.size() * itemH;
-                    float menuX = GetScreenWidth() / 2.0f - menuW / 2.0f; float menuY = GetScreenHeight() / 2.0f - menuH / 2.0f;
+                    
+                    // --- DYNAMIC SCALING FOR MOUSE CLICKS ---
+                    float screenW = (float)GetScreenWidth();
+                    float screenH = (float)GetScreenHeight();
+                    float scale = std::min(screenW / 1280.0f, screenH / 960.0f);
+                    
+                    float menuW = 400.0f * scale; 
+                    float itemH = 60.0f * scale; 
+                    float menuH = (80.0f * scale) + (interactTargets.size() * itemH);
+                    float menuX = screenW / 2.0f - menuW / 2.0f; 
+                    float menuY = screenH / 2.0f - menuH / 2.0f;
 
                     for (size_t i = 0; i < interactTargets.size(); ++i) {
-                        if (CheckCollisionPointRec(mousePos, { menuX + 20, menuY + 60 + i * itemH, menuW - 40, itemH - 10 })) {
+                        Rectangle itemRec = { menuX + (20.0f * scale), menuY + (80.0f * scale) + i * itemH, menuW - (40.0f * scale), itemH - (10.0f * scale) };
+                        if (CheckCollisionPointRec(mousePos, itemRec)) {
                             if (Vector2Length(GetMouseDelta()) > 0.1f) interactSelectedIndex = i; 
                             if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
                         }
@@ -380,7 +409,7 @@ int main(void) {
                         executeAction = true; actionTargetIdx = interactTargets[interactSelectedIndex]; showInteractMenu = false;
                     }
                     if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) showInteractMenu = false;
-                } 
+                }
             }
 
             if (!showInteractMenu && !player.isStone && !player.isDead) {
@@ -416,8 +445,24 @@ int main(void) {
                     Entity& held = entities[grabbedEntityIndex];
                     held.isUsing = IsKeyDown(KEY_F);
                     
-                    if (held.HasTag(TAG_EXTINGUISHER) && held.isUsing && !isOverlayActive) {
-                        if (!IsSoundPlaying(sounds["fire-extenguisher"])) PlaySound(sounds["fire-extenguisher"]);
+                    if (held.HasTag(TAG_EXTINGUISHER)) {
+                        // Play the sound if the player is holding 'F' and no menu is open
+                        if (held.isUsing && !isOverlayActive) {
+                            if (!IsSoundPlaying(sounds["fire-extenguisher"])) {
+                                PlaySound(sounds["fire-extenguisher"]);
+                            }
+                        } 
+                        // Stop the sound the moment they let go of 'F' or an overlay opens
+                        else {
+                            if (IsSoundPlaying(sounds["fire-extenguisher"])) {
+                                StopSound(sounds["fire-extenguisher"]);
+                            }
+                        }
+                    }
+                } else {
+                    // Failsafe: Stop the sound instantly if the player drops/throws the extinguisher
+                    if (IsSoundPlaying(sounds["fire-extenguisher"])) {
+                        StopSound(sounds["fire-extenguisher"]);
                     }
                 }
 
@@ -430,20 +475,21 @@ int main(void) {
                             hName.find("Open Book") != std::string::npos || hName.find("Magazine") != std::string::npos) {
                             isOverlayActive = true;
                             environmentF = true;
+                            PlaySound(sounds["shulffing-paper"]);
                         }
                     }
 
                     if (!environmentF) {
                         std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
                         for (auto& b : pIntBoxList) {
-                            float reach = 60.0f; b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach;
+                            float reach = 100.0f; b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach;
                             b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach;
-                            b.min.x -= 50; b.max.x += 50; b.min.z -= 50; b.max.z += 50; b.min.y -= 20; b.max.y += 120; 
+                            b.min.x -= 50; b.max.x += 50; b.min.z -= 50; b.max.z += 50; b.min.y -= 20; b.max.y += 500; 
                         }
                         
                         for (auto& e : entities) {
                             if ((e.HasTag(TAG_FUSEBOX) || e.HasTag(TAG_LIGHTSWITCH)) && CheckCollisionLists(pIntBoxList, e.GetWorldInteractBounds())) {
-                                e.stateValue = (e.stateValue > 0.5f) ? 0.0f : 1.0f; environmentF = true; break;
+                                e.stateValue = (e.stateValue > 0.5f) ? 0.0f : 1.0f; environmentF = true; PlaySound(sounds["light-switch-click-on-and-off"]); break;
                             }
                         }
                         if (!environmentF && grabbedEntityIndex != -1) {
@@ -555,15 +601,16 @@ int main(void) {
                             
                             if (item.HasTag(TAG_SANDALS)) item.stateTimer = 4.0f;
                             if (item.name.find("sign") != std::string::npos) PlaySound(sounds["plastictap-wetfloors"]);
-                            if (item.HasTag(TAG_SANDBAG)) PlaySound(sounds["sandbags-put-on-fl"]);
+                            if (item.HasTag(TAG_SANDBAG)) PlaySound(sounds["sandbags-put-on-floor"]);
                             item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1;
                         } else if (interactTargets.size() == 1) { executeAction = true; actionTargetIdx = interactTargets[0]; isDropMenu = true; } 
                         else { showInteractMenu = true; isDropMenu = true; interactSelectedIndex = 0; }
                     } else {
                         std::vector<BoundingBox> pIntBoxList = player.GetWorldInteractBounds(); 
-                        for (auto& b : pIntBoxList) { float reach = 60.0f; b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach; b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach; b.min.x -= 50; b.max.x += 50; b.min.z -= 50; b.max.z += 50; b.min.y -= 20; b.max.y += 120; }
+                        for (auto& b : pIntBoxList) { float reach = 100.0f; b.min.x += player.facingDir.x * reach; b.max.x += player.facingDir.x * reach; b.min.z += player.facingDir.z * reach; b.max.z += player.facingDir.z * reach; b.min.x -= 50; b.max.x += 50; b.min.z -= 50; b.max.z += 50; b.min.y -= 20; b.max.y += 500; }
                         for (size_t i = 1; i < entities.size(); ++i) {
                             if (i == equippedEyewear || i == equippedGloves) continue; 
+                            // <--- Change this back to only look for canGrab items!
                             if (!entities[i].isGrabbed && entities[i].canGrab && CheckCollisionLists(pIntBoxList, entities[i].GetWorldInteractBounds())) interactTargets.push_back(i);
                         }
                         std::sort(interactTargets.begin(), interactTargets.end(), [&](int a, int b) { return Vector3Distance(player.position, entities[a].position) < Vector3Distance(player.position, entities[b].position); });
@@ -586,7 +633,7 @@ int main(void) {
             if (executeAction) {
                 if (!isDropMenu) {
                     grabbedEntityIndex = actionTargetIdx; entities[grabbedEntityIndex].isGrabbed = true; entities[grabbedEntityIndex].attachedTo = -1;
-                } else {
+                 } else {
                     Entity& item = entities[grabbedEntityIndex];
                     ChemResult res = ProcessChemistry(grabbedEntityIndex, actionTargetIdx, entities);
                     if (res != CHEM_NONE) { if (res == CHEM_ATTACHED) { item.attachedTo = actionTargetIdx; item.isGrabbed = false; item.isUsing = false; item.velocity = {0,0,0}; grabbedEntityIndex = -1; } } 
@@ -615,13 +662,13 @@ int main(void) {
                 if (currentAnimState == 3) playbackSpeed = 90.0f; 
 
                 animTimer += dt * playbackSpeed; 
-                animTimer = fmod(animTimer, (float)anims[activeIdx].keyframeCount); 
+                animTimer = fmod(animTimer, (float)anims[activeIdx].frameCount); 
                 UpdateModelAnimation(models["Player"], anims[activeIdx], (int)animTimer);
             }
 
             if (mummyAnims != nullptr && mummyAnimCount > 0) {
                 mummyAnimTimer += dt * 30.0f; 
-                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].keyframeCount);
+                mummyAnimTimer = fmod(mummyAnimTimer, (float)mummyAnims[0].frameCount);
                 UpdateModelAnimation(models["mummy"], mummyAnims[0], (int)mummyAnimTimer);
             }
 
@@ -683,10 +730,38 @@ int main(void) {
 
         // The HUD and menus are drawn AFTER the shader mode is ended, so they remain unaffected!
         if (currentState == STATE_MENU || currentState == STATE_OPTIONS) {
-            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart, fontMuseum, fontEmployee, currentNight); 
+            UpdateAndRenderMenu((int&)currentState, mainMusicVolume, triggerShiftStart, triggerNewGame, fontMuseum, fontEmployee, currentNight); 
             SetMusicVolume(mainMusic, mainMusicVolume); SetMusicVolume(tutorialMusic, mainMusicVolume);
+        } else if (currentState == STATE_CREDITS) {
+            // --- NEW FIX: Draw the Credits! ---
+            UpdateAndRenderCredits((int&)currentState, fontMuseum, fontEmployee);
         } else {
-            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities, hazVis);
+            RenderHUD(renderTarget, shiftTimer, SECONDS_PER_HOUR, currentNight, player, showInteractMenu, isDropMenu, interactTargets, interactSelectedIndex, entities, hazVis, fontMuseum, fontEmployee);            
+            
+            // --- NEW FIX: Upgraded cinematic prompt over the HUD! ---
+            if (currentState == STATE_PLAYING && currentNight >= 5 && !isOverlayActive && grabbedEntityIndex == -1) {
+                for (auto& e : entities) {
+                    if (e.HasTag(TAG_PANDORA)) {
+                        float distXZ = Vector2Distance({player.position.x, player.position.z}, {e.position.x, e.position.z});
+                        if (distXZ < 120.0f) {
+                            const char* promptMsg = "[Q] Stare at the box for the rest of the night";
+                            float fontSize = 35.0f * scale; // Made it slightly bigger
+                            Vector2 pVec = MeasureTextEx(fontEmployee, promptMsg, fontSize, 1);
+                            
+                            // Calculate centered coordinates
+                            float drawX = (float)GetScreenWidth() / 2.0f - pVec.x / 2.0f;
+                            float drawY = (float)GetScreenHeight() - (200.0f * scale); // Moved it higher
+                            
+                            // Draw a dark background box for maximum contrast
+                            DrawRectangle((int)drawX - 15, (int)drawY - 10, (int)pVec.x + 30, (int)pVec.y + 20, {0, 0, 0, 180});
+                            
+                            // Draw the gold text
+                            DrawTextEx(fontEmployee, promptMsg, { drawX, drawY }, fontSize, 1, {218, 165, 32, 255});
+                            break;
+                        }
+                    }
+                }
+            }
             
             if (currentState == STATE_TUTORIAL && !isOverlayActive) {
                 bool tutorialFinished = false;
@@ -701,6 +776,14 @@ int main(void) {
                 UpdateAndRenderOverlay(isOverlayActive, tutorialMusic, newsMusic, tutorialStep, entities[grabbedEntityIndex].name, entities[grabbedEntityIndex].stateTimer);        }
             }
         EndDrawing();
+
+        if (triggerNewGame) {
+            remove("museum_save.dat"); // Deletes the physical file
+            currentNight = 1;          // Reset progress
+            ResetNight();              // Rebuild the level
+            currentState = STATE_TUTORIAL; // Force tutorial
+            continue;
+        }
         
         if (triggerShiftStart) {
             ResetNight(); 
