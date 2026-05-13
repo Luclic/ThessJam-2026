@@ -200,7 +200,7 @@ int main(void) {
         "glasscase", "light1", "light2", "painting1", "painting2", "paintinglight", "pillar1", "pillar2", "rope1", "rope2", "sign1", "sign2", "sign3", 
         "stand1", "stand2", "stand3", "stand4", "ticketstand", "ticketstandseat", "wall1", "wall1corner", "wall2", "wall2corner", "wall3", "wall3corner", "wall4", "wall4corner", 
         "arch1", "arch2", "arch3", "archarch1", "archarch2", "archarch3", "artifactsign1", "Waterfall", "Time Hotel 7.07", "Saw", "Wall Shelf", "Shelves", 
-        "Cardboard Boxes", "Time Hotel 5.25 Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
+        "Cardboard Boxes", "Painters Tape", "Pixel Sunglasses", "Sunglasses", "Glove", "Broom", "Sponge", "Bag", "Fire Extinguisher", "rocks", 
         "Ocean", "Coin", "Sandal", "Greek Temple", "Chalice", "Coin Pouch", "Pyramid", "Anubis Statue", "mjolner", "Rock", "Tall Vase", "Generic",
         "zeus", "medusa", "lightning", "pandora", "mummy", "Info Button", "Magazine", "Open Book", "Sticker", "Cork", "Snake", "Coffin", "sarcophagus", "Viking Boat", "Shield Round", "Fuse Box"
     
@@ -316,6 +316,19 @@ int main(void) {
             
             // If the user hit ENTER inside the review screen
             if (triggerNextNight) {
+                
+                // 1. Failsafe: Drop any held items so they don't save permanently frozen in the air!
+                if (grabbedEntityIndex != -1) {
+                    entities[grabbedEntityIndex].isGrabbed = false;
+                    entities[grabbedEntityIndex].isSolid = true; 
+                    grabbedEntityIndex = -1;
+                }
+
+                // 2. CRITICAL FIX: Erase dynamically spawned items to prevent Save/Load size mismatch!
+                entities.erase(std::remove_if(entities.begin(), entities.end(), [](const Entity& e) {
+                    return e.name == "Floor Hole" || e.name == "Bubble Mat";
+                }), entities.end());
+
                 SaveGame(currentNight, entities); 
                 ResetNight(); 
                 currentState = STATE_PLAYING; 
@@ -583,7 +596,10 @@ int main(void) {
                         PlaySound(sounds["handsaw"]);
                         BoundingBox holeBox = {{-30, 0, -30}, {30, 5, 30}};
                         Entity hole = MakeProp("Floor Hole", {player.position.x + player.facingDir.x * 70.0f, 0.0f, player.position.z + player.facingDir.z * 70.0f}, holeBox, BLACK, {TAG_HOLE});
-                        hole.isSolid = false; hole.canGrab = false; entities.push_back(hole);
+                        hole.isSolid = false; 
+                        hole.canGrab = false; 
+                        hole.isStatic = true; // --- NEW FIX: Makes the hole immune to gravity! ---
+                        entities.push_back(hole);
                     }
                     if (held.HasTag(TAG_BUBBLE_WRAP) && held.stateValue > 0) {
                         PlaySound(sounds["popping-bubble-wr"]);
@@ -591,14 +607,17 @@ int main(void) {
                         Entity mat = MakeProp("Bubble Mat", player.position, matBox, SKYBLUE, {TAG_MAT});
                         mat.isSolid = false; mat.canGrab = false; entities.push_back(mat);
                     }
-                    if (held.HasTag(TAG_TAPE) && held.stateTimer > 0) {
+                    if (held.HasTag(TAG_TAPE) && held.stateValue > 0) { // <--- Changed to stateValue
                         for (auto& target : entities) {
-                            if (target.HasTag(TAG_WIND_BAG) && Vector3Distance(player.position, target.position) < 80.0f) { PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; held.stateTimer -= 1.0f; }
-                            if (target.HasTag(TAG_MUMMY) && target.isGlitching && Vector3Distance(player.position, target.position) < 80.0f) { PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; target.velocity = {0, 0, 0}; target.color = LIGHTGRAY; held.stateTimer -= 1.0f; }
+                            if (target.HasTag(TAG_WIND_BAG) && Vector3Distance(player.position, target.position) < 80.0f) { 
+                                PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; held.stateValue -= 1.0f; // <--- Changed
+                            }
+                            if (target.HasTag(TAG_MUMMY) && target.isGlitching && Vector3Distance(player.position, target.position) < 80.0f) { 
+                                PlaySound(sounds["ducktape"]); target.AddTag(TAG_BROKEN); target.isGlitching = false; target.velocity = {0, 0, 0}; target.color = LIGHTGRAY; held.stateValue -= 1.0f; // <--- Changed
+                            }
                         }
                     }
                 }
-                
                 if (IsKeyPressed(KEY_E)) {
                     interactTargets.clear();
                     if (grabbedEntityIndex != -1) {

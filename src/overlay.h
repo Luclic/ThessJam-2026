@@ -96,11 +96,11 @@ inline void UpdateAndRenderOverlay(bool& isOverlayActive, Music& currentMainMusi
         if (currentHandbookPage < 2) DrawText("(D) >", (int)(startX + bookW + 20), (int)(screenH/2 - 10), 20, LIGHTGRAY);
     }
 
-    const char* closeText = "Press 'ESC' or 'E' to close and resume shift.";
+    const char* closeText = "Press 'E' to close and resume shift.";
     DrawText(closeText, (int)(screenW/2 - MeasureText(closeText, 20)/2), (int)(startY + bookH + 20), 20, WHITE);
 
     // --- OVERLAY LOGIC ---
-    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_E)) {
+    if (IsKeyPressed(KEY_E)) {
         isOverlayActive = false;
         currentHandbookPage = 0; 
         StopMusicStream(overlayMusic);

@@ -229,7 +229,7 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         target.RemoveTag(TAG_BROKEN);
         if (target.HasTag(TAG_FRAGILE)) { target.color = ORANGE; if (!target.boundsList.empty()) target.boundsList[0].max.y = 30.0f; }
         if (target.HasTag(TAG_MEDUSA)) { target.color = GREEN; if (!target.boundsList.empty()) target.boundsList[0].max.y = 30.0f; }
-        if (tool.stateTimer <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        if (tool.stateTimer <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = true; }
         return CHEM_USED_BUT_KEPT;
     }
     
@@ -273,14 +273,14 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
         target.isGlitching = false; 
         target.velocity = {0,0,0};
         target.stateTimer = -999.0f; // Permanently prevents them from flying again!
-        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = true; }
         return CHEM_USED_BUT_KEPT;
     }
     
     // Tape the Mummy
     if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_MUMMY)) {
         tool.stateValue -= 1.0f; target.isGlitching = false; target.velocity = {0,0,0};
-        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
+        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = true; }
         return CHEM_USED_BUT_KEPT;
     }
 
@@ -304,15 +304,6 @@ inline ChemResult ProcessChemistry(int toolIdx, int targetIdx, std::vector<Entit
     if (tool.HasTag(TAG_LIGHTNING) && target.HasTag(TAG_FUSEBOX)) {
         tool.attachedTo = targetIdx; 
         return CHEM_ATTACHED;
-    }
-
-    // Taping Broken Eyewear
-    if (tool.HasTag(TAG_TAPE) && target.HasTag(TAG_EYEWEAR) && target.HasTag(TAG_BROKEN)) {
-        tool.stateValue -= 1.0f; target.RemoveTag(TAG_BROKEN);
-        if (target.HasTag(TAG_EYEWEAR)) { target.color = BLACK; if (!target.boundsList.empty()) target.boundsList[0].max.y = 10.0f; } 
-        else { target.color = YELLOW; if (!target.boundsList.empty()) target.boundsList[0].max.y = 30.0f; }
-        if (tool.stateValue <= 0) { tool.position = {-9999, -9999, -9999}; tool.isSolid = false; tool.canGrab = false; }
-        return CHEM_USED_BUT_KEPT;
     }
     
     // Hovering Mjolnir with Sandals

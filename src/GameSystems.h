@@ -175,7 +175,12 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 bool hitGround = false;
                 bool inHole = false;
                 
-                for (const auto& hole : entities) if (hole.HasTag(TAG_HOLE) && CheckCollisionLists(myBoxY, hole.GetWorldBounds())) { inHole = true; break; }
+                // --- NEW FIX: Make sure the hole doesn't check against itself! ---
+                for (const auto& hole : entities) {
+                    if (&e != &hole && hole.HasTag(TAG_HOLE) && CheckCollisionLists(myBoxY, hole.GetWorldBounds())) { 
+                        inHole = true; break; 
+                    }
+                }
                 
                 if (e.position.y <= 0.1f && !inHole) { 
                     e.position.y = 0.0f; hitGround = true;
@@ -361,8 +366,8 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 // Handle Tape Application
                 for (size_t j = 0; j < entities.size(); ++j) {
                     auto& item = entities[j];
-                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateTimer > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
-                        if (!e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateTimer -= 1.0f; item.isUsing = false; }
+                    if (item.HasTag(TAG_TAPE) && item.isUsing && item.stateValue > 0.0f && Vector3Distance(e.position, item.position) < 150.0f) {
+                        if (!e.HasTag(TAG_BROKEN)) { e.AddTag(TAG_BROKEN); item.stateValue -= 1.0f; item.isUsing = false; }
                     }
                 }
 
@@ -485,44 +490,38 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                 e.stateValue += 45.0f * dt; 
                 if (e.stateValue >= 360.0f) e.stateValue -= 360.0f;
 
-                // 2. EXTINGUISHER SUPPRESSION
-                if (e.stateTimer > 0.0f) {
-                    e.stateTimer -= dt; // Counting down the 3 seconds of safety!
-                } else {
-                    // Turn on the visuals!
-                    visuals.drawingSunBeams = true;
-                    visuals.sunCenter = e.position;
-                    visuals.sunAngle = e.stateValue;
+                // --- NEW FIX: Beams instantly activate without the 3-second timer! ---
+                visuals.drawingSunBeams = true;
+                visuals.sunCenter = e.position;
+                visuals.sunAngle = e.stateValue;
 
-                    // 3. DEADLY BEAM COLLISION
-                    Vector2 pPos = {player.position.x, player.position.z};
-                    Vector2 sPos = {e.position.x, e.position.z};
+                // 2. DEADLY BEAM COLLISION
+                Vector2 pPos = {player.position.x, player.position.z};
+                Vector2 sPos = {e.position.x, e.position.z};
+                
+                // Check all 4 directions (0, 90, 180, 270 degrees from current rotation)
+                for (int j = 0; j < 4; j++) {
+                    float angleRad = (e.stateValue + j * 90.0f) * DEG2RAD;
+                    Vector2 beamDir = {cos(angleRad), sin(angleRad)};
                     
-                    // Check all 4 directions (0, 90, 180, 270 degrees from current rotation)
-                    for (int j = 0; j < 4; j++) {
-                        float angleRad = (e.stateValue + j * 90.0f) * DEG2RAD;
-                        Vector2 beamDir = {cos(angleRad), sin(angleRad)};
-                        
-                        // Check if player is in the beam (Length: 800 units, Width: 60 units)
-                        Vector2 toPlayer = {pPos.x - sPos.x, pPos.y - sPos.y};
-                        float projection = toPlayer.x * beamDir.x + toPlayer.y * beamDir.y; 
-                        
-                        if (projection > 0.0f && projection < 800.0f) { // If player is in front of this specific beam
-                            float perpDist = fabs(toPlayer.x * (-beamDir.y) + toPlayer.y * beamDir.x); // Distance from center line
-                            if (perpDist < 30.0f) { // If within the 60 unit width
-                                player.isDead = true; 
-                            }
+                    // Check if player is in the beam (Length: 800 units, Width: 60 units)
+                    Vector2 toPlayer = {pPos.x - sPos.x, pPos.y - sPos.y};
+                    float projection = toPlayer.x * beamDir.x + toPlayer.y * beamDir.y; 
+                    
+                    if (projection > 0.0f && projection < 800.0f) { // If player is in front of this specific beam
+                        float perpDist = fabs(toPlayer.x * (-beamDir.y) + toPlayer.y * beamDir.x); // Distance from center line
+                        if (perpDist < 30.0f) { // If within the 60 unit width
+                            player.isDead = true; 
                         }
                     }
                 }
 
-                // 4. THE PERMANENT FIX (Water)
+                // 3. THE PERMANENT FIX (Water)
                 for (auto& w : entities) {
                     if (w.HasTag(TAG_WATER_SOURCE) && w.stateValue > 0.0f && Vector3Distance(e.position, w.position) < w.stateValue) {
                         if (!isPandoraOpen) {
                             e.isGlitching = false; 
                             e.color = BLACK;     // Fixes it permanently!
-                            e.stateTimer = 0.0f; // Reset suppression timer
                         }
                         break;
                     }
@@ -888,6 +887,10 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
                         if (!isPandoraOpen) target.isGlitching = false; 
                         target.velocity = {0,0,0}; target.position = e.position; target.position.y = -30.0f; 
                     }
+                    if (target.HasTag(TAG_BANSHEE_STONE) && target.isGlitching) {
+                        if (!isPandoraOpen) target.isGlitching = false; 
+                        target.velocity = {0,0,0}; target.position = e.position; target.position.y = -25.0f; 
+                    }
                 }
             }
         }
@@ -939,8 +942,12 @@ inline HazardVisuals UpdatePhysicsAndHazards(std::vector<Entity>& entities, floa
             for (auto& target : entities) {
                 if (&target != &player && CheckCollisionPointTriangle({target.position.x, target.position.z}, ep1, ep2, ep3)) {
                     if (target.HasTag(TAG_MJOLNIR)) { target.velocity.x += dir.x * 4000.0f * dt; target.velocity.z += dir.z * 4000.0f * dt; target.stateTimer = 1.5f; }
-                    if (target.HasTag(TAG_SUN_DISK) && target.isGlitching && !isPandoraOpen) { target.stateTimer = 3.0f; } // Suppress the fire for 3 seconds!
-                    if (target.HasTag(TAG_WATER_SOURCE) && target.stateValue > 0) { target.isStone = true; if (!isPandoraOpen) target.isGlitching = false; } 
+                    // --- NEW FIX: Permanently extinguish the Sun Disk! ---
+                    if (target.HasTag(TAG_SUN_DISK) && target.isGlitching && !isPandoraOpen) { 
+                        target.isGlitching = false; 
+                        target.color = BLACK; 
+                        target.stateTimer = 0.0f; 
+                    }                    if (target.HasTag(TAG_WATER_SOURCE) && target.stateValue > 0) { target.isStone = true; if (!isPandoraOpen) target.isGlitching = false; } 
                     if (target.canGrab && !target.HasTag(TAG_HEAVY)) { target.velocity.x += dir.x * 2500.0f * dt; target.velocity.z += dir.z * 2500.0f * dt; }
                     if (target.HasTag(TAG_PANDORA) && target.isGlitching) target.stateTimer = 15.0f;
                 }
